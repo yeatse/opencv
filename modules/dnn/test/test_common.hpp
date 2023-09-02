@@ -143,7 +143,8 @@ testing::internal::ParamGenerator< tuple<Backend, Target> > dnnBackendsAndTarget
         bool withCUDA = true,
         bool withNgraph = true,
         bool withWebnn = true,
-        bool withCann = true
+        bool withCann = true,
+        bool withMetal = true
 );
 
 testing::internal::ParamGenerator< tuple<Backend, Target> > dnnBackendsAndTargetsIE();
