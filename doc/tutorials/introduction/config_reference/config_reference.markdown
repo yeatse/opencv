@@ -428,6 +428,7 @@ There are multiple less popular frameworks which can be used to read and write v
 | `WITH_MFX` | _OFF_ | [MediaSDK](http://mediasdk.intel.com/) library can be used for HW-accelerated decoding and encoding of raw video streams. |
 | `WITH_GPHOTO2` | _OFF_ | [GPhoto](https://en.wikipedia.org/wiki/GPhoto) library can be used to capure frames from cameras. |
 | `WITH_ANDROID_MEDIANDK` | _ON_ | [MediaNDK](https://developer.android.com/ndk/guides/stable_apis#libmediandk) library is available on Android since API level 21. |
+| `WITH_METAL` | _ON_ | [Metal](https://en.wikipedia.org/wiki/Metal_(API)) is available on Apple platforms. |
 
 
 ### videoio plugins

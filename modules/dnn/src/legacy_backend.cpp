@@ -14,6 +14,7 @@
 #include "op_webnn.hpp"
 #include "op_timvx.hpp"
 #include "op_cann.hpp"
+#include "op_metal.hpp"
 
 namespace cv {
 namespace dnn {
@@ -119,6 +120,13 @@ Ptr<BackendWrapper> wrapMat(int backendId, int targetId, cv::Mat& m)
     else if (backendId == DNN_BACKEND_CANN)
     {
         CV_Assert(0 && "Internal error: DNN_BACKEND_CANN must be implemented through inheritance");
+    }
+    else if (backendId == DNN_BACKEND_METAL)
+    {
+        CV_Assert(haveMetal());
+#ifdef HAVE_METAL
+        return Ptr<BackendWrapper>(new MetalBackendWrapper(m));
+#endif  // HAVE_METAL
     }
     else
         CV_Error(Error::StsNotImplemented, "Unknown backend identifier");

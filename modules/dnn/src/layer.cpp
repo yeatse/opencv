@@ -93,6 +93,12 @@ Ptr<BackendNode> Layer::initCann(const std::vector<Ptr<BackendWrapper> > &inputs
     return Ptr<BackendNode>();
 }
 
+Ptr<BackendNode> Layer::initMetal(void* context, const std::vector<Ptr<BackendWrapper> >& inputs, const std::vector<Ptr<BackendWrapper> >& outputs)
+{
+    CV_Error(Error::StsNotImplemented, "Metal pipeline of " + type + " layers is not defined.");
+    return Ptr<BackendNode>();
+}
+
 Ptr<BackendNode> Layer::tryAttach(const Ptr<BackendNode>& node)
 {
     return Ptr<BackendNode>();

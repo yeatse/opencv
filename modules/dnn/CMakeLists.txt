@@ -208,6 +208,10 @@ if(NOT EMSCRIPTEN)
   endif()
 endif()
 
+if(WITH_METAL)
+  list(APPEND libs "-framework Metal -framework MetalPerformanceShaders")
+endif()
+
 ocv_module_include_directories(${include_dirs})
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   ocv_append_source_files_cxx_compiler_options(fw_srcs "-Wno-suggest-override")  # GCC
@@ -231,7 +235,7 @@ ocv_list_filterout_ex(dnn_plugin_srcs
     # importers
     "/src/(caffe|darknet|onnx|tensorflow|torch)/"
     # executors
-    "/src/(cuda|cuda4dnn|ocl4dnn|vkcom|webnn)/"
+    "/src/(cuda|cuda4dnn|ocl4dnn|vkcom|webnn|metal)/"
 )
 
 ocv_option(OPENCV_DNN_OPENVINO "Build with OpenVINO support (2021.4+)" (TARGET ocv.3rdparty.openvino))

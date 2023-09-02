@@ -297,6 +297,9 @@ OCV_OPTION(WITH_OPENVINO "Include Intel OpenVINO toolkit support" (WITH_INF_ENGI
 OCV_OPTION(WITH_WEBNN "Include WebNN support" OFF
   VISIBLE_IF TRUE
   VERIFY HAVE_WEBNN)
+OCV_OPTION(WITH_METAL "Include Metal support" ON
+  VISIBLE_IF APPLE
+  VERIFY HAVE_METAL)
 OCV_OPTION(WITH_JASPER "Include JPEG2K support (Jasper)" ON
   VISIBLE_IF NOT IOS AND NOT XROS
   VERIFY HAVE_JASPER)
@@ -1899,6 +1902,11 @@ if(WITH_WEBNN OR HAVE_WEBNN)
     status("    Include path:"  WEBNN_HEADER_DIRS THEN "${WEBNN_HEADER_DIRS}" ELSE "NO")
     status("    Link libraries:" WEBNN_LIBRARIES THEN "${WEBNN_LIBRARIES}" ELSE "NO")
   endif()
+endif()
+
+if(WITH_METAL OR HAVE_METAL)
+  status("")
+  status("  Metal:"     HAVE_METAL THEN "YES" ELSE "NO")
 endif()
 
 if(WITH_TIMVX)

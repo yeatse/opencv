@@ -80,6 +80,7 @@ CV__DNN_INLINE_NS_BEGIN
         DNN_BACKEND_WEBNN,
         DNN_BACKEND_TIMVX,
         DNN_BACKEND_CANN,
+        DNN_BACKEND_METAL,
 #if defined(__OPENCV_BUILD) || defined(BUILD_PLUGIN)
 #if !defined(OPENCV_BINDING_PARSER)
         DNN_BACKEND_INFERENCE_ENGINE_NGRAPH = 1000000,     // internal - use DNN_BACKEND_INFERENCE_ENGINE + setInferenceEngineBackendType()
@@ -105,6 +106,7 @@ CV__DNN_INLINE_NS_BEGIN
         DNN_TARGET_HDDL,
         DNN_TARGET_NPU,
         DNN_TARGET_CPU_FP16, // Only the ARM platform is supported. Low precision computing, accelerate model inference.
+		DNN_TARGET_METAL,
     };
 
     /**
@@ -368,6 +370,17 @@ CV__DNN_INLINE_NS_BEGIN
         virtual Ptr<BackendNode> initCann(const std::vector<Ptr<BackendWrapper> > &inputs,
                                           const std::vector<Ptr<BackendWrapper> > &outputs,
                                           const std::vector<Ptr<BackendNode> >& nodes);
+
+
+        /**
+         * @brief Returns a Metal backend node
+         * @param   context  void pointer to MetalContext object
+         * @param   inputs   layer inputs
+         * @param   outputs  layer outputs
+         */
+        virtual Ptr<BackendNode> initMetal(void* context,
+                                           const std::vector<Ptr<BackendWrapper> >& inputs,
+                                           const std::vector<Ptr<BackendWrapper> >& outputs);
 
        /**
         * @brief Automatic Halide scheduling based on layer hyper-parameters.

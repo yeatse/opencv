@@ -13,6 +13,7 @@
 #include "op_webnn.hpp"
 #include "op_timvx.hpp"
 #include "op_cann.hpp"
+#include "op_metal.hpp"
 
 #include <opencv2/dnn/shape_utils.hpp>
 #include <opencv2/imgproc.hpp>
@@ -206,6 +207,10 @@ struct Net::Impl : public detail::NetImplBase
     std::unique_ptr<CudaInfo_t> cudaInfo;
 
     void initCUDABackend(const std::vector<LayerPin>& blobsToKeep_);
+#endif
+
+#ifdef HAVE_METAL
+    void initMetalBackend();
 #endif
 
     void allocateLayer(int lid, const LayersShapesMap& layersShapes);

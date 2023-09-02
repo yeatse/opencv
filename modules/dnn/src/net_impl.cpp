@@ -120,6 +120,8 @@ void Net::Impl::validateBackendAndTarget()
               IS_DNN_CUDA_TARGET(preferableTarget));
     CV_Assert(preferableBackend != DNN_BACKEND_TIMVX ||
               preferableTarget == DNN_TARGET_NPU);
+    CV_Assert(preferableBackend != DNN_BACKEND_METAL ||
+              preferableTarget == DNN_TARGET_METAL);
 
     CV_Assert(preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NGRAPH && "Inheritance internal error");
 }
@@ -182,6 +184,12 @@ void Net::Impl::setUpNet(const std::vector<LayerPin>& blobsToKeep_)
         }
 
         if (preferableBackend == DNN_BACKEND_TIMVX && !haveTimVX())
+        {
+            preferableBackend = DNN_BACKEND_OPENCV;
+            preferableTarget = DNN_TARGET_CPU;
+        }
+
+        if (preferableBackend == DNN_BACKEND_METAL && !haveMetal())
         {
             preferableBackend = DNN_BACKEND_OPENCV;
             preferableTarget = DNN_TARGET_CPU;
@@ -837,6 +845,12 @@ void Net::Impl::forwardLayer(LayerData& ld)
                     it->second = Ptr<BackendNode>();
                     forwardLayer(ld);
                 }
+            }
+#endif
+#ifdef HAVE_METAL
+            else if (preferableBackend == DNN_BACKEND_METAL)
+            {
+                forwardMetal(ld.outputBlobsWrappers, node);
             }
 #endif
             else
