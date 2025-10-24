@@ -169,29 +169,45 @@ modules/dnn/cmake/hooks/INIT_MODULE_SOURCES_opencv_dnn.cmake
 **Goal**: Prove complete integration with one working layer
 
 **Implementation Approach**:
-- **Compute Shader**: Custom Metal Shading Language kernel
-- **Execution Model**: Direct buffer access (no texture overhead)
-- **Thread Configuration**: Optimized thread group sizing
+- **MPS Framework**: Uses `MPSCNNNeuronReLU` (Apple's optimized kernel)
+- **Execution Model**: MPSImage-based (texture format)
+- **Buffer-to-Texture**: Converts MTLBuffer → MPSImage for MPS compatibility
 - **Synchronous**: Wait for completion (async in future)
 
-**ReLU Kernel** (Metal Shading Language):
-```metal
-kernel void relu_kernel(device const float* input [[buffer(0)]],
-                       device float* output [[buffer(1)]],
-                       constant uint& count [[buffer(2)]],
-                       uint gid [[thread_position_in_grid]])
-{
-    if (gid < count) {
-        output[gid] = max(input[gid], 0.0f);
-    }
-}
+**ReLU Implementation**:
+```objc
+// Initialize MPS kernel (in constructor)
+reluKernel_ = [[MPSCNNNeuronReLU alloc] initWithDevice:device a:0.0f];
+
+// Execute (in execute method)
+MPSImageDescriptor* desc = [MPSImageDescriptor
+    imageDescriptorWithChannelFormat:MPSImageFeatureChannelFormatFloat32
+                               width:width height:height
+                     featureChannels:channels];
+
+MPSImage* inputImage = [[MPSImage alloc] initWithDevice:device
+                                        imageDescriptor:desc];
+MPSImage* outputImage = [[MPSImage alloc] initWithDevice:device
+                                         imageDescriptor:desc];
+
+// Copy MTLBuffer data to MPSImage texture
+[inputImage.texture replaceRegion:region withBytes:srcPtr ...];
+
+// Encode ReLU operation (Apple-optimized)
+[reluKernel_ encodeToCommandBuffer:commandBuffer
+                       sourceImage:inputImage
+                  destinationImage:outputImage];
+
+// Copy results back to MTLBuffer
+[outputImage.texture getBytes:dstPtr ...];
 ```
 
 **Performance Characteristics**:
+- Uses Apple's optimized MPS kernel (better than custom shader)
 - Element-wise operation: O(n) complexity
-- Memory bandwidth limited
-- GPU parallelization across all elements
-- Suitable for MVP validation
+- Current limitation: Buffer↔Texture copy overhead
+- Future optimization: Use MPSGraph to eliminate copies
+- Suitable for MVP validation and production use
 
 ### Phase 3: Build System ✅
 
@@ -735,19 +751,25 @@ PERF_TEST(DNN_Metal, ResNet50_Inference) {
 
 ## Design Decisions
 
-### Why Metal Shading Language for ReLU?
-**Decision**: Custom compute kernel instead of MPS primitives
+### Why Use MPSCNNNeuronReLU Instead of Custom Shader?
+**Decision**: Use Apple's MPS framework (`MPSCNNNeuronReLU`) instead of custom Metal shader
 
 **Rationale**:
-- **Learning**: Demonstrates Metal compute pipeline
-- **Flexibility**: Easy to modify and extend
-- **Simplicity**: ReLU is trivial, perfect for teaching example
-- **Future**: Can switch to MPS or MPSGraph later
+- **Performance**: Apple's kernels are heavily optimized for their hardware
+- **Maintainability**: Less code to maintain, Apple handles optimizations
+- **Compatibility**: Works across all Apple GPU architectures automatically
+- **Best Practice**: Follow Metal Performance Shaders design patterns
 
 **Trade-offs**:
-- Slightly more code than using `MPSCNNNeuronReLU`
-- + Full control over execution
-- + Educational value for future contributors
+- Requires buffer→texture conversion (copy overhead for MVP)
+- + Better performance than custom shader
+- + Easier to extend to other MPS operations
+- + Production-ready approach
+
+**Evolution**:
+- Initial implementation: Custom Metal shader (educational)
+- Current implementation: MPSCNNNeuronReLU (optimized)
+- Future: MPSGraph for automatic kernel fusion
 
 ### Why Shared Memory Mode?
 **Decision**: Use `MTLResourceStorageModeShared` for all buffers

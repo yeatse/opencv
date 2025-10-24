@@ -65,91 +65,103 @@ void MetalReLUNode::execute(const std::vector<Ptr<MetalTensor>>& inputs,
         id<MTLBuffer> inputBuffer = inputs[0]->getBuffer();
         id<MTLBuffer> outputBuffer = outputs[0]->getBuffer();
 
+        const MatShape& shape = inputs[0]->shape();
         size_t total = inputs[0]->total();
 
-        // For simple element-wise operations like ReLU, we can use a simpler approach
-        // Create compute pipeline using Metal compute shader
+        // Create command buffer
         id<MTLCommandBuffer> commandBuffer = ctx.createCommandBuffer();
         if (!commandBuffer) {
             CV_Error(Error::StsError, "DNN/Metal: Failed to create command buffer");
             return;
         }
 
-        // For MVP, use simple approach with Metal compute shader
-        // We'll create a basic ReLU kernel using Metal Shading Language
+        // Determine image dimensions from tensor shape
+        // For OpenCV tensors: shape can be [N, C, H, W] or just [N, C] or [N]
+        NSUInteger channels = 1, height = 1, width = 1;
 
-        // Get or create compute pipeline
-        static id<MTLComputePipelineState> reluPipeline = nil;
-        if (!reluPipeline) {
-            // Create simple ReLU compute kernel
-            NSString* kernelSource = @R"(
-                #include <metal_stdlib>
-                using namespace metal;
-
-                kernel void relu_kernel(device const float* input [[buffer(0)]],
-                                       device float* output [[buffer(1)]],
-                                       constant uint& count [[buffer(2)]],
-                                       uint gid [[thread_position_in_grid]])
-                {
-                    if (gid < count) {
-                        output[gid] = max(input[gid], 0.0f);
-                    }
-                }
-            )";
-
-            NSError* error = nil;
-            id<MTLLibrary> library = [ctx.getDevice() newLibraryWithSource:kernelSource
-                                                                   options:nil
-                                                                     error:&error];
-            if (error || !library) {
-                NSLog(@"Error creating Metal library: %@", error);
-                CV_Error(Error::StsError, "DNN/Metal: Failed to compile ReLU kernel");
-                return;
-            }
-
-            id<MTLFunction> kernelFunction = [library newFunctionWithName:@"relu_kernel"];
-            if (!kernelFunction) {
-                CV_Error(Error::StsError, "DNN/Metal: Failed to find relu_kernel function");
-                return;
-            }
-
-            reluPipeline = [ctx.getDevice() newComputePipelineStateWithFunction:kernelFunction
-                                                                           error:&error];
-            [reluPipeline retain];
-
-            if (error || !reluPipeline) {
-                NSLog(@"Error creating compute pipeline: %@", error);
-                CV_Error(Error::StsError, "DNN/Metal: Failed to create compute pipeline");
-                return;
-            }
+        if (shape.size() == 4) {
+            // Standard 4D tensor: [N, C, H, W]
+            channels = shape[1];
+            height = shape[2];
+            width = shape[3];
+        } else if (shape.size() == 3) {
+            // 3D tensor: [C, H, W]
+            channels = shape[0];
+            height = shape[1];
+            width = shape[2];
+        } else if (shape.size() == 2) {
+            // 2D tensor: [N, C] - treat as 1D image with C channels
+            channels = shape[1];
+            width = shape[0];
+        } else {
+            // 1D tensor or other: treat as single row with all elements
+            width = total;
         }
 
-        // Encode compute command
-        id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+        // Create MPSImage descriptor
+        MPSImageDescriptor* imageDesc = [MPSImageDescriptor
+            imageDescriptorWithChannelFormat:MPSImageFeatureChannelFormatFloat32
+                                       width:width
+                                      height:height
+                             featureChannels:channels];
 
-        [encoder setComputePipelineState:reluPipeline];
-        [encoder setBuffer:inputBuffer offset:0 atIndex:0];
-        [encoder setBuffer:outputBuffer offset:0 atIndex:1];
-        uint32_t count = static_cast<uint32_t>(total);
-        [encoder setBytes:&count length:sizeof(uint32_t) atIndex:2];
+        // Create MPSImages pointing to our buffers
+        // Note: MPSImage can wrap an MTLBuffer
+        MPSImage* inputImage = [[MPSImage alloc]
+            initWithDevice:ctx.getDevice()
+           imageDescriptor:imageDesc];
 
-        // Calculate grid size
-        NSUInteger threadGroupSize = reluPipeline.maxTotalThreadsPerThreadgroup;
-        if (threadGroupSize > total) {
-            threadGroupSize = total;
+        MPSImage* outputImage = [[MPSImage alloc]
+            initWithDevice:ctx.getDevice()
+           imageDescriptor:imageDesc];
+
+        // Copy data from our buffers to MPSImage textures
+        // For MVP, we do a simple copy. Future optimization: avoid this copy
+        NSUInteger bytesPerRow = width * sizeof(float);
+        NSUInteger bytesPerImage = bytesPerRow * height;
+
+        for (NSUInteger c = 0; c < channels; ++c) {
+            float* srcPtr = (float*)[inputBuffer contents] + c * height * width;
+            MTLRegion region = MTLRegionMake3D(0, 0, 0, width, height, 1);
+
+            [inputImage.texture replaceRegion:region
+                                  mipmapLevel:0
+                                        slice:c
+                                    withBytes:srcPtr
+                                  bytesPerRow:bytesPerRow
+                                bytesPerImage:bytesPerImage];
         }
 
-        MTLSize threadsPerThreadgroup = MTLSizeMake(threadGroupSize, 1, 1);
-        MTLSize threadgroupsPerGrid = MTLSizeMake((total + threadGroupSize - 1) / threadGroupSize, 1, 1);
+        // Encode ReLU using MPS kernel
+        [reluKernel_ encodeToCommandBuffer:commandBuffer
+                               sourceImage:inputImage
+                          destinationImage:outputImage];
 
-        [encoder dispatchThreadgroups:threadgroupsPerGrid
-                threadsPerThreadgroup:threadsPerThreadgroup];
+        // Copy results back to output buffer
+        id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
+        [blitEncoder synchronizeResource:outputImage.texture];
+        [blitEncoder endEncoding];
 
-        [encoder endEncoding];
-
-        // Commit and wait for completion
+        // Commit and wait
         [commandBuffer commit];
         [commandBuffer waitUntilCompleted];
+
+        // Copy data from MPSImage texture back to our buffer
+        for (NSUInteger c = 0; c < channels; ++c) {
+            float* dstPtr = (float*)[outputBuffer contents] + c * height * width;
+            MTLRegion region = MTLRegionMake3D(0, 0, 0, width, height, 1);
+
+            [outputImage.texture getBytes:dstPtr
+                              bytesPerRow:bytesPerRow
+                            bytesPerImage:bytesPerImage
+                               fromRegion:region
+                              mipmapLevel:0
+                                    slice:c];
+        }
+
+        // Clean up
+        [inputImage release];
+        [outputImage release];
     }
 }
 
