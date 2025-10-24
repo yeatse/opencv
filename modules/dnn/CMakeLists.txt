@@ -35,6 +35,26 @@ if(HAVE_CANN)
   ocv_target_compile_definitions(${the_module} PRIVATE "HAVE_CANN=1")
 endif()
 
+ocv_option(OPENCV_DNN_METAL "Build with Metal support (macOS/iOS)"
+    APPLE
+)
+
+if(OPENCV_DNN_METAL AND APPLE)
+  find_library(METAL_FRAMEWORK Metal)
+  find_library(MPS_FRAMEWORK MetalPerformanceShaders)
+  find_library(FOUNDATION_FRAMEWORK Foundation)
+
+  if(METAL_FRAMEWORK AND MPS_FRAMEWORK AND FOUNDATION_FRAMEWORK)
+    set(HAVE_METAL ON)
+    ocv_target_compile_definitions(${the_module} PRIVATE "HAVE_METAL=1")
+
+    message(STATUS "DNN: Metal backend enabled")
+  else()
+    message(WARNING "DNN: Metal backend requested but frameworks not found. Disabling Metal support.")
+    set(HAVE_METAL OFF)
+  endif()
+endif()
+
 ocv_option(OPENCV_DNN_CUDA "Build with CUDA support"
     HAVE_CUDA
     AND HAVE_CUBLAS
@@ -198,6 +218,10 @@ if(HAVE_CANN)
   list(APPEND libs -Wl,--whole-archive ${CANN_LIBRARIES} -Wl,--no-whole-archive)
 endif()
 
+if(HAVE_METAL)
+  list(APPEND libs ${METAL_FRAMEWORK} ${MPS_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
+endif()
+
 set(webnn_srcs "")
 if(NOT EMSCRIPTEN)
   if(HAVE_WEBNN)
@@ -231,7 +255,7 @@ ocv_list_filterout_ex(dnn_plugin_srcs
     # importers
     "/src/(caffe|darknet|onnx|tensorflow|torch)/"
     # executors
-    "/src/(cuda|cuda4dnn|ocl4dnn|vkcom|webnn)/"
+    "/src/(cuda|cuda4dnn|ocl4dnn|vkcom|webnn|metal)/"
 )
 
 ocv_option(OPENCV_DNN_OPENVINO "Build with OpenVINO support (2021.4+)" (TARGET ocv.3rdparty.openvino))

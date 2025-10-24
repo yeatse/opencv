@@ -14,6 +14,10 @@
 #include "cuda4dnn/init.hpp"
 #endif
 
+#ifdef HAVE_METAL
+#include "metal/op_metal.hpp"
+#endif
+
 namespace cv {
 namespace dnn {
 CV__DNN_INLINE_NS_BEGIN
@@ -90,6 +94,12 @@ Ptr<BackendWrapper> Net::Impl::wrap(Mat& host)
             return Ptr<BackendWrapper>(new TimVXBackendWrapper(baseBuffer, host));
 #endif
         }
+        else if (preferableBackend == DNN_BACKEND_METAL)
+        {
+#ifdef HAVE_METAL
+            return Ptr<BackendWrapper>(new MetalBackendWrapper(baseBuffer, shape));
+#endif
+        }
         else if (preferableBackend == DNN_BACKEND_CANN)
         {
             CV_Assert(0 && "Internal error: DNN_BACKEND_CANN must be implemented through inheritance");
@@ -153,6 +163,18 @@ void Net::Impl::initBackend(const std::vector<LayerPin>& blobsToKeep_)
         initTimVXBackend();
 #else
         CV_Error(Error::StsNotImplemented, "This OpenCV version is built without support of TimVX");
+#endif
+    }
+    else if (preferableBackend == DNN_BACKEND_METAL)
+    {
+#ifdef HAVE_METAL
+        // Check if Metal is available on this system
+        if (!haveMetalSupport())
+        {
+            CV_Error(Error::StsError, "Metal backend is not available on this system");
+        }
+#else
+        CV_Error(Error::StsNotImplemented, "This OpenCV version is built without support of Metal");
 #endif
     }
     else if (preferableBackend == DNN_BACKEND_CANN)

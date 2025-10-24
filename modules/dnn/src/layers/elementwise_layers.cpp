@@ -50,6 +50,11 @@
 #include "../op_webnn.hpp"
 #include "../op_cann.hpp"
 
+#ifdef HAVE_METAL
+#include "../metal/op_metal.hpp"
+#include "../metal/ops/mps_activation.hpp"
+#endif
+
 #include <opencv2/dnn/shape_utils.hpp>
 #include <iostream>
 #include <limits>
@@ -283,6 +288,14 @@ public:
     }
 #endif
 
+#ifdef HAVE_METAL
+    Ptr<BackendNode> initMetal(const std::vector<Ptr<BackendWrapper>>& inputs,
+                               const std::vector<Ptr<BackendWrapper>>& outputs) CV_OVERRIDE
+    {
+        return func.initMetal(inputs, outputs);
+    }
+#endif
+
     bool tryQuantize(const std::vector<std::vector<float> > &scales,
                      const std::vector<std::vector<int> > &zeropoints, LayerParams& params) CV_OVERRIDE
     {
@@ -349,6 +362,10 @@ struct ReLUFunctor : public BaseFunctor
             return slope == 0;
         }
 #endif
+#ifdef HAVE_METAL
+        if (backendId == DNN_BACKEND_METAL)
+            return slope == 0;  // Only support standard ReLU for MVP
+#endif
         return backendId == DNN_BACKEND_OPENCV ||
                backendId == DNN_BACKEND_CUDA ||
                backendId == DNN_BACKEND_HALIDE ||
@@ -392,6 +409,16 @@ struct ReLUFunctor : public BaseFunctor
     Ptr<BackendNode> initCUDA(int target, csl::Stream stream)
     {
         return make_cuda_node<cuda4dnn::ReLUOp>(target, stream, slope);
+    }
+#endif
+
+#ifdef HAVE_METAL
+    Ptr<BackendNode> initMetal(const std::vector<Ptr<BackendWrapper>>& inputs,
+                               const std::vector<Ptr<BackendWrapper>>& outputs)
+    {
+        CV_UNUSED(inputs);
+        CV_UNUSED(outputs);
+        return createMetalReLUNode(slope);
     }
 #endif
 
