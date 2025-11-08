@@ -297,6 +297,9 @@ OCV_OPTION(WITH_OPENVINO "Include Intel OpenVINO toolkit support" (WITH_INF_ENGI
 OCV_OPTION(WITH_WEBNN "Include WebNN support" OFF
   VISIBLE_IF TRUE
   VERIFY HAVE_WEBNN)
+OCV_OPTION(WITH_METAL "Include Metal backend support (Apple platforms)" ON
+  VISIBLE_IF APPLE
+  VERIFY HAVE_METAL)
 OCV_OPTION(WITH_JASPER "Include JPEG2K support (Jasper)" ON
   VISIBLE_IF NOT IOS AND NOT XROS
   VERIFY HAVE_JASPER)
@@ -897,6 +900,11 @@ endif()
 # --- WebNN ---
 if(WITH_WEBNN)
   include(cmake/OpenCVDetectWebNN.cmake)
+endif()
+
+# --- Metal ---
+if(WITH_METAL)
+  include(cmake/OpenCVDetectMetal.cmake)
 endif()
 
 # --- Inference Engine ---
@@ -1899,6 +1907,11 @@ if(WITH_WEBNN OR HAVE_WEBNN)
     status("    Include path:"  WEBNN_HEADER_DIRS THEN "${WEBNN_HEADER_DIRS}" ELSE "NO")
     status("    Link libraries:" WEBNN_LIBRARIES THEN "${WEBNN_LIBRARIES}" ELSE "NO")
   endif()
+endif()
+
+if(WITH_METAL OR HAVE_METAL)
+  status("")
+  status("  Metal Backend:"     HAVE_METAL THEN "YES (using MPSGraph)" ELSE "NO")
 endif()
 
 if(WITH_TIMVX)

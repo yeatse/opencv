@@ -27,6 +27,10 @@ if(WITH_WEBNN AND HAVE_WEBNN)
   ocv_target_compile_definitions(${the_module} PRIVATE "HAVE_WEBNN=1")
 endif()
 
+if(WITH_METAL AND HAVE_METAL)
+  ocv_target_compile_definitions(${the_module} PRIVATE "HAVE_METAL=1")
+endif()
+
 if(HAVE_TIMVX)
   ocv_target_compile_definitions(${the_module} PRIVATE "HAVE_TIMVX=1")
 endif()
@@ -208,6 +212,17 @@ if(NOT EMSCRIPTEN)
   endif()
 endif()
 
+set(metal_srcs "")
+if(APPLE AND HAVE_METAL)
+  list(APPEND metal_srcs "${CMAKE_CURRENT_LIST_DIR}/src/op_metal.mm")
+  list(APPEND libs ${METAL_FRAMEWORK} ${MPSGRAPH_FRAMEWORK})
+  set_source_files_properties(
+    "${CMAKE_CURRENT_LIST_DIR}/src/op_metal.mm"
+    PROPERTIES
+      COMPILE_FLAGS "-std=c++11 -fobjc-arc"
+  )
+endif()
+
 ocv_module_include_directories(${include_dirs})
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   ocv_append_source_files_cxx_compiler_options(fw_srcs "-Wno-suggest-override")  # GCC
@@ -255,7 +270,7 @@ endif()
 
 ocv_install_used_external_targets(${libs} ${dnn_runtime_libs})
 
-ocv_glob_module_sources(${sources_options} SOURCES ${fw_srcs} ${webnn_srcs})
+ocv_glob_module_sources(${sources_options} SOURCES ${fw_srcs} ${webnn_srcs} ${metal_srcs})
 ocv_create_module(${libs} ${dnn_runtime_libs})
 ocv_add_samples()
 ocv_add_accuracy_tests(${dnn_runtime_libs})
