@@ -1,9 +1,11 @@
-# MPSGraph Backend Implementation Plan for OpenCV DNN
+# Metal Backend Implementation Plan for OpenCV DNN
 
-**Project:** GPU Acceleration on Apple Devices using MPSGraph
+**Project:** GPU Acceleration on Apple Devices using Metal (MPSGraph)
 **Target Platforms:** macOS, iOS, visionOS, tvOS
 **Reference Implementation:** WebNN Backend (`modules/dnn/src/op_webnn.*`)
+**Implementation Detail:** Uses MPSGraph framework internally
 **Created:** 2025-11-07
+**Updated:** 2025-11-08
 
 ---
 
@@ -29,16 +31,18 @@
 
 ### Objective
 
-Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural network inference on Apple devices (macOS, iOS, visionOS, tvOS) using Metal Performance Shaders Graph API.
+Add **Metal** backend to OpenCV DNN module to enable GPU-accelerated neural network inference on Apple devices (macOS, iOS, visionOS, tvOS) using Metal Performance Shaders Graph (MPSGraph) API.
 
-### Why MPSGraph?
+**Note:** While the public-facing API uses "Metal" naming (e.g., `DNN_BACKEND_METAL`, `initMetal()`), the implementation uses Apple's MPSGraph framework internally. This design keeps implementation details abstracted from users.
+
+### Why Metal (MPSGraph)?
 
 **Current State:**
 - OpenCV DNN on Apple platforms: CPU-only or disabled OpenCL backend
 - `CV_OCL4DNN = 0` on Apple platforms (see `modules/dnn/CMakeLists.txt`)
 - No native GPU acceleration for Apple Neural Engine or Metal
 
-**MPSGraph Advantages:**
+**Metal/MPSGraph Advantages:**
 - ✅ **Native Apple Support** - First-party framework, well-optimized
 - ✅ **Cross-Device** - macOS, iOS, visionOS, tvOS with single codebase
 - ✅ **Hardware Access** - GPU (Metal), Neural Engine, CPU
@@ -54,15 +58,16 @@ Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural n
 ### Deliverables
 
 1. **Core Backend Implementation**
-   - `modules/dnn/src/op_mpsgraph.hpp/mm` (Objective-C++)
-   - `MPSGraphBackendNode`, `MPSGraphBackendWrapper`, `MPSGraphNet` classes
+   - `modules/dnn/src/op_metal.hpp/mm` (Objective-C++)
+   - `MetalBackendNode`, `MetalBackendWrapper`, `MetalNet` classes
+   - Internal implementation using MPSGraph framework
 
 2. **Layer Support** (Phase 1: 15+ layers)
    - Convolution, Pooling, Activation, BatchNorm, Concat, etc.
-   - Each layer implements `initMPSGraph()` method
+   - Each layer implements `initMetal()` method
 
 3. **Build System**
-   - CMake detection for Metal framework
+   - CMake detection for Metal framework (`WITH_METAL` option)
    - Platform-specific compilation (Apple only)
    - Integration with existing OpenCV build
 
@@ -79,7 +84,7 @@ Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural n
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                  OpenCV DNN with MPSGraph Backend                    │
+│                  OpenCV DNN with Metal Backend                       │
 └─────────────────────────────────────────────────────────────────────┘
 
     User Application (C++/Objective-C++)
@@ -93,39 +98,38 @@ Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural n
     │ • backend mgmt    │
     └────────┬──────────┘
              │
-             │ setPreferableBackend(DNN_BACKEND_MPSGRAPH)
+             │ setPreferableBackend(DNN_BACKEND_METAL)  ← PUBLIC API
              │ setPreferableTarget(DNN_TARGET_CPU/OPENCL)
              │
              ▼
     ┌────────────────────────────────────────────────┐
-    │   MPSGraph Backend (op_mpsgraph.mm)            │
+    │   Metal Backend (op_metal.mm)                  │  ← PUBLIC API
     │                                                │
     │  ┌──────────────────────────────────┐         │
-    │  │    MPSGraphNet                    │         │
-    │  │  • MPSGraph* graph                │         │
-    │  │  • id<MTLDevice> device           │         │
-    │  │  • id<MTLCommandQueue> queue      │         │
-    │  │  • MPSGraphExecutable* executable │         │
+    │  │    MetalNet (C++ wrapper)         │         │  ← PUBLIC API
+    │  │  • MPSGraphNetImpl* impl          │         │
+    │  │    (Internal MPSGraph details)    │         │
     │  └──────────────────────────────────┘         │
     │                                                │
     │  ┌──────────────────────────────────┐         │
-    │  │  MPSGraphBackendNode              │         │
-    │  │  • MPSGraphTensor* tensor         │         │
-    │  │  • Ptr<MPSGraphNet> net           │         │
+    │  │  MetalBackendNode                 │         │  ← PUBLIC API
+    │  │  • MPSGraphTensor* tensor         │         │  (internal detail)
+    │  │  • Ptr<MetalNet> net              │         │
     │  └──────────────────────────────────┘         │
     │                                                │
     │  ┌──────────────────────────────────┐         │
-    │  │  MPSGraphBackendWrapper           │         │
+    │  │  MetalBackendWrapper              │         │  ← PUBLIC API
     │  │  • cv::Mat* hostMat               │         │
     │  │  • id<MTLBuffer> metalBuffer      │         │
-    │  │  • MPSGraphTensorData* tensorData │         │
+    │  │  • MPSGraphTensorData* tensorData │         │  (internal detail)
     │  └──────────────────────────────────┘         │
     └───────────────┬────────────────────────────────┘
                     │
-                    │ MPSGraph Objective-C API
+                    │ MPSGraph Objective-C API (INTERNAL)
                     ▼
     ┌────────────────────────────────────────────────┐
     │        MPSGraph Framework                      │
+    │        (Implementation Detail)                 │
     │                                                │
     │  • Graph building (operators)                  │
     │  • Compilation & optimization                  │
@@ -133,7 +137,7 @@ Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural n
     └───────────────┬────────────────────────────────┘
                     │
                     ▼
-           Metal (GPU/Neural Engine/CPU)
+           Metal GPU / Neural Engine / CPU
 ```
 
 ### Design Principles
@@ -141,12 +145,12 @@ Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural n
 **1. Graph-Based Execution** (Like WebNN, Unlike CUDA/OpenCL)
 - Build complete computational graph during initialization
 - Single execution call per inference
-- Runtime optimization by MPSGraph
+- Runtime optimization by MPSGraph (internal framework)
 
 **2. Hybrid Execution**
-- Supported layers run on MPSGraph (GPU/Neural Engine)
+- Supported layers run on Metal backend (GPU/Neural Engine via MPSGraph)
 - Unsupported layers fall back to OpenCV CPU
-- Multiple MPSGraph instances if graph is split
+- Multiple graph instances if computational graph is split
 
 **3. Zero-Copy Integration**
 - Direct `cv::Mat` memory usage where possible
@@ -166,26 +170,27 @@ Add **MPSGraph** backend to OpenCV DNN module to enable GPU-accelerated neural n
 
 ```
 modules/dnn/src/
-├── op_mpsgraph.hpp           # Public interface (C++ compatible header)
-└── op_mpsgraph.mm            # Implementation (Objective-C++)
+├── op_metal.hpp              # Public interface (C++ compatible header)
+└── op_metal.mm               # Implementation (Objective-C++, uses MPSGraph internally)
 
 modules/dnn/src/layers/
-├── convolution_layer.cpp     # Add initMPSGraph() method
-├── pooling_layer.cpp         # Add initMPSGraph() method
+├── convolution_layer.cpp     # Add initMetal() method
+├── pooling_layer.cpp         # Add initMetal() method
 ├── ...                       # Add to all supported layers
 
 cmake/
-└── OpenCVDetectMPSGraph.cmake  # Build detection
+└── OpenCVDetectMetal.cmake   # Build detection
 
 platforms/apple/
-└── mpsgraph_utils.mm         # Apple-specific utilities (optional)
+└── metal_utils.mm            # Apple-specific utilities (optional)
 ```
 
-### 3.2 MPSGraphNet Class
+### 3.2 MetalNet Class
 
-**File:** `modules/dnn/src/op_mpsgraph.mm`
+**File:** `modules/dnn/src/op_metal.mm`
 
 ```objc
+// Internal implementation class (implementation detail, uses MPSGraph)
 @interface MPSGraphNetImpl : NSObject
 
 @property (nonatomic, strong) MPSGraph* graph;
@@ -212,15 +217,16 @@ platforms/apple/
 @end
 ```
 
-**C++ Wrapper:**
+**C++ Wrapper (Public API):**
 
 ```cpp
 namespace cv { namespace dnn {
 
-class MPSGraphNet {
+// Public API class - uses MPSGraph internally
+class MetalNet {
 public:
-    MPSGraphNet();
-    ~MPSGraphNet();
+    MetalNet();
+    ~MetalNet();
 
     void init(Target targetId);
     void createGraph(Target targetId);
@@ -235,11 +241,11 @@ public:
     bool isInitialized() const;
     void reset();
 
-    // Opaque pointer to Objective-C implementation
-    void* impl;  // MPSGraphNetImpl*
+    // Opaque pointer to Objective-C implementation (MPSGraphNetImpl)
+    void* impl;
 
     // Metal resources (managed by impl)
-    std::unordered_map<std::string, cv::Ptr<MPSGraphBackendWrapper>> allBlobs;
+    std::unordered_map<std::string, cv::Ptr<MetalBackendWrapper>> allBlobs;
 
     std::vector<std::string> inputNames;
     std::vector<std::string> outputNames;
@@ -248,32 +254,34 @@ public:
 }}  // namespace cv::dnn
 ```
 
-### 3.3 MPSGraphBackendNode Class
+### 3.3 MetalBackendNode Class
 
 ```cpp
 namespace cv { namespace dnn {
 
-class MPSGraphBackendNode : public BackendNode {
+// Public API class - wraps MPSGraph tensors internally
+class MetalBackendNode : public BackendNode {
 public:
-    MPSGraphBackendNode(void* tensor);  // MPSGraphTensor*
+    MetalBackendNode(void* tensor);  // MPSGraphTensor* (internal)
 
     std::string name;
-    void* tensor;           // MPSGraphTensor* (opaque to C++)
-    Ptr<MPSGraphNet> net;   // Reference to parent graph
+    void* tensor;           // MPSGraphTensor* (opaque to C++, implementation detail)
+    Ptr<MetalNet> net;      // Reference to parent graph
 };
 
 }}  // namespace cv::dnn
 ```
 
-### 3.4 MPSGraphBackendWrapper Class
+### 3.4 MetalBackendWrapper Class
 
 ```cpp
 namespace cv { namespace dnn {
 
-class MPSGraphBackendWrapper : public BackendWrapper {
+// Public API class - manages Metal memory
+class MetalBackendWrapper : public BackendWrapper {
 public:
-    MPSGraphBackendWrapper(int targetId, cv::Mat& m);
-    ~MPSGraphBackendWrapper();
+    MetalBackendWrapper(int targetId, cv::Mat& m);
+    ~MetalBackendWrapper();
 
     virtual void copyToHost() CV_OVERRIDE;
     virtual void setHostDirty() CV_OVERRIDE;
@@ -281,7 +289,7 @@ public:
     std::string name;
     cv::Mat* host;                  // CPU memory
     void* metalBuffer;              // id<MTLBuffer> (opaque)
-    void* tensorData;               // MPSGraphTensorData* (opaque)
+    void* tensorData;               // MPSGraphTensorData* (opaque, internal)
     size_t size;
     std::vector<int32_t> dimensions;
 
@@ -305,14 +313,15 @@ public:
     // ... existing methods ...
 
     virtual bool supportBackend(int backendId) CV_OVERRIDE {
-        if (backendId == DNN_BACKEND_MPSGRAPH) {
+        if (backendId == DNN_BACKEND_METAL) {
             // Check if this specific conv config is supported
             return true;
         }
         return ConvolutionLayer::supportBackend(backendId);
     }
 
-    virtual Ptr<BackendNode> initMPSGraph(
+    // Public API method - internally uses MPSGraph
+    virtual Ptr<BackendNode> initMetal(
         const std::vector<Ptr<BackendWrapper>>& inputs,
         const std::vector<Ptr<BackendNode>>& nodes) CV_OVERRIDE;
 };
@@ -390,9 +399,9 @@ Priority 4 (Week 10+):  Quantization, RNN, edge cases
 
 **Tasks:**
 1. Create file structure
-   - `op_mpsgraph.hpp` (C++ header)
-   - `op_mpsgraph.mm` (Objective-C++ implementation)
-   - `OpenCVDetectMPSGraph.cmake` (build detection)
+   - `op_metal.hpp` (C++ header)
+   - `op_metal.mm` (Objective-C++ implementation, uses MPSGraph internally)
+   - `OpenCVDetectMetal.cmake` (build detection)
 
 2. Add backend enumeration
    ```cpp
@@ -402,15 +411,15 @@ Priority 4 (Week 10+):  Quantization, RNN, edge cases
        DNN_BACKEND_OPENCV = 1,
        // ...
        DNN_BACKEND_WEBNN = 7,
-       DNN_BACKEND_MPSGRAPH = 8,  // NEW
+       DNN_BACKEND_METAL = 8,  // NEW - Metal backend (uses MPSGraph internally)
    };
    ```
 
 3. Implement basic infrastructure
-   - `MPSGraphNet` class (empty graph)
-   - `MPSGraphBackendNode` class
-   - `MPSGraphBackendWrapper` class
-   - `initMPSGraphBackend()` in `Net::Impl`
+   - `MetalNet` class (empty graph, uses MPSGraph internally)
+   - `MetalBackendNode` class
+   - `MetalBackendWrapper` class
+   - `initMetalBackend()` in `Net::Impl`
 
 4. Build system integration
    - Detect Metal framework availability
@@ -422,8 +431,8 @@ Priority 4 (Week 10+):  Quantization, RNN, edge cases
 **Validation:**
 ```cpp
 Net net = readNetFromONNX("model.onnx");
-net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);  // Should not crash
-// All layers fall back to CPU (no initMPSGraph yet)
+net.setPreferableBackend(DNN_BACKEND_METAL);  // Should not crash
+// All layers fall back to CPU (no initMetal yet)
 ```
 
 ---
@@ -433,7 +442,7 @@ net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);  // Should not crash
 **Tasks:**
 
 1. **Convolution Layer**
-   - Implement `ConvolutionLayerImpl::initMPSGraph()`
+   - Implement `ConvolutionLayerImpl::initMetal()` (uses MPSGraph internally)
    - Handle NCHW → NHWC layout conversion
    - Map stride, padding, dilation to `MPSGraphConvolution2DOpDescriptor`
    - Weight layout handling (OIHW)
@@ -459,13 +468,13 @@ net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);  // Should not crash
    - Broadcasting support
 
 6. **Graph Building Logic**
-   - Implement `Net::Impl::initMPSGraphBackend()`
-   - Layer-by-layer graph construction
+   - Implement `Net::Impl::initMetalBackend()`
+   - Layer-by-layer graph construction (using MPSGraph internally)
    - Input/output tensor management
    - Named tensor tracking
 
 7. **Execution Pipeline**
-   - Implement `MPSGraphNet::forward()`
+   - Implement `MetalNet::forward()` (calls MPSGraph internally)
    - Input feeding: `cv::Mat` → `MPSGraphTensorData`
    - Graph execution: `runWithMTLCommandQueue:feeds:targetTensors:`
    - Output retrieval: `MPSGraphTensorData` → `cv::Mat`
@@ -475,11 +484,11 @@ net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);  // Should not crash
 **Validation:**
 ```cpp
 Net net = readNetFromONNX("mobilenet_v2.onnx");
-net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);
+net.setPreferableBackend(DNN_BACKEND_METAL);
 net.setPreferableTarget(DNN_TARGET_OPENCL);  // GPU
 Mat blob = blobFromImage(img, 1.0/255, Size(224,224));
 net.setInput(blob);
-Mat output = net.forward();  // Should work on GPU
+Mat output = net.forward();  // Should work on GPU via Metal/MPSGraph
 ```
 
 ---
@@ -584,12 +593,13 @@ Mat output = net.forward();  // Should work on GPU
 
 ### 6.1 CMake Detection
 
-**File:** `cmake/OpenCVDetectMPSGraph.cmake`
+**File:** `cmake/OpenCVDetectMetal.cmake`
 
 ```cmake
-# Detect MPSGraph support on Apple platforms
+# Detect Metal backend support on Apple platforms
+# Note: Metal backend uses MPSGraph internally
 if(APPLE)
-    if(WITH_MPSGRAPH)
+    if(WITH_METAL)
         # Check for Metal framework
         find_library(METAL_FRAMEWORK Metal)
         find_library(MPSGRAPH_FRAMEWORK MetalPerformanceShadersGraph)
@@ -599,35 +609,35 @@ if(APPLE)
             # MPSGraph requires iOS 14+, macOS 11+, tvOS 14+, visionOS 1+
 
             # Test compilation
-            try_compile(VALID_MPSGRAPH
+            try_compile(VALID_METAL
                 "${OpenCV_BINARY_DIR}"
-                SOURCES "${OpenCV_SOURCE_DIR}/cmake/checks/mpsgraph.mm"
+                SOURCES "${OpenCV_SOURCE_DIR}/cmake/checks/metal.mm"
                 CMAKE_FLAGS
                     "-DLINK_LIBRARIES:STRING=${METAL_FRAMEWORK};${MPSGRAPH_FRAMEWORK}"
                 OUTPUT_VARIABLE TRY_OUT
             )
 
-            if(VALID_MPSGRAPH)
-                set(HAVE_MPSGRAPH ON)
-                message(STATUS "MPSGraph: YES")
+            if(VALID_METAL)
+                set(HAVE_METAL ON)
+                message(STATUS "Metal Backend: YES (using MPSGraph)")
                 message(STATUS "  Metal Framework: ${METAL_FRAMEWORK}")
                 message(STATUS "  MPSGraph Framework: ${MPSGRAPH_FRAMEWORK}")
             else()
-                message(WARNING "MPSGraph compilation test failed")
+                message(WARNING "Metal backend compilation test failed")
                 message(STATUS "${TRY_OUT}")
             endif()
         else()
-            message(STATUS "MPSGraph: NO (frameworks not found)")
+            message(STATUS "Metal Backend: NO (frameworks not found)")
         endif()
     else()
-        message(STATUS "MPSGraph: DISABLED (WITH_MPSGRAPH=OFF)")
+        message(STATUS "Metal Backend: DISABLED (WITH_METAL=OFF)")
     endif()
 else()
-    message(STATUS "MPSGraph: NO (Apple platforms only)")
+    message(STATUS "Metal Backend: NO (Apple platforms only)")
 endif()
 ```
 
-**File:** `cmake/checks/mpsgraph.mm`
+**File:** `cmake/checks/metal.mm`
 
 ```objc
 @import Metal;
@@ -663,10 +673,10 @@ int main() {
 ```cmake
 # After existing backend configuration
 
-# MPSGraph backend (Apple platforms)
-if(HAVE_MPSGRAPH)
+# Metal backend (Apple platforms, uses MPSGraph internally)
+if(HAVE_METAL)
     list(APPEND dnn_srcs
-        "${CMAKE_CURRENT_LIST_DIR}/src/op_mpsgraph.mm"
+        "${CMAKE_CURRENT_LIST_DIR}/src/op_metal.mm"
     )
 
     ocv_list_add_prefix(dnn_srcs "${CMAKE_CURRENT_LIST_DIR}/src/")
@@ -680,15 +690,15 @@ if(HAVE_MPSGRAPH)
 
     # Set Objective-C++ standard
     set_source_files_properties(
-        "${CMAKE_CURRENT_LIST_DIR}/src/op_mpsgraph.mm"
+        "${CMAKE_CURRENT_LIST_DIR}/src/op_metal.mm"
         PROPERTIES
             COMPILE_FLAGS "-std=c++11 -fobjc-arc"
     )
 
     # Define macro for conditional compilation
-    ocv_add_definitions(-DHAVE_MPSGRAPH)
+    ocv_add_definitions(-DHAVE_METAL)
 
-    message(STATUS "DNN: MPSGraph backend enabled")
+    message(STATUS "DNN: Metal backend enabled (using MPSGraph)")
 endif()
 ```
 
@@ -697,9 +707,9 @@ endif()
 **File:** `platforms/apple/CMakeLists.txt` (if needed)
 
 ```cmake
-# Apple-specific MPSGraph configuration
-if(HAVE_MPSGRAPH)
-    # Set deployment target
+# Apple-specific Metal backend configuration
+if(HAVE_METAL)
+    # Set deployment target (MPSGraph requires iOS 14+, macOS 11+)
     if(IOS)
         set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0")
     elseif(APPLE AND NOT IOS)
@@ -714,11 +724,11 @@ endif()
 ### 6.4 Conditional Compilation
 
 ```cpp
-// In op_mpsgraph.hpp
+// In op_metal.hpp
 namespace cv { namespace dnn {
 
-constexpr bool haveMPSGraph() {
-#ifdef HAVE_MPSGRAPH
+constexpr bool haveMetal() {
+#ifdef HAVE_METAL
     return true;
 #else
     return false;
@@ -727,20 +737,20 @@ constexpr bool haveMPSGraph() {
 
 }}  // namespace cv::dnn
 
-// In op_mpsgraph.mm
-#ifdef HAVE_MPSGRAPH
+// In op_metal.mm
+#ifdef HAVE_METAL
 
-// Full implementation
+// Full implementation (uses MPSGraph)
 
 #else
 
 // Stub implementation
-void forwardMPSGraph(...) {
+void forwardMetal(...) {
     CV_Error(Error::StsNotImplemented,
-             "MPSGraph is not enabled in this OpenCV build");
+             "Metal backend is not enabled in this OpenCV build");
 }
 
-#endif  // HAVE_MPSGRAPH
+#endif  // HAVE_METAL
 ```
 
 ---
@@ -759,7 +769,7 @@ CPU Memory (cv::Mat)           Metal Memory (MTLBuffer)
      │                                 │
      ▼                                 ▼
 ┌──────────────┐              ┌──────────────────┐
-│ LayerData    │              │ MPSGraphBackend  │
+│ LayerData    │              │ MetalBackend     │
 │              │              │ Wrapper          │
 │ outputBlobs  │──────────────│                  │
 │   [Mat]      │   wraps      │ • metalBuffer    │
@@ -795,7 +805,7 @@ id<MTLBuffer> buffer;
 ### 7.3 Lazy Transfer Strategy
 
 ```cpp
-class MPSGraphBackendWrapper : public BackendWrapper {
+class MetalBackendWrapper : public BackendWrapper {
 private:
     bool hostDirty;      // CPU data modified
     bool deviceDirty;    // GPU data modified
@@ -862,8 +872,8 @@ public:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│       Net::Impl::initMPSGraphBackend()                          │
-│       (Called during first forward())                           │
+│       Net::Impl::initMetalBackend()                             │
+│       (Called during first forward() - uses MPSGraph internally)│
 └─────────────────────────────────────────────────────────────────┘
 
 Step 1: Create Metal Resources
@@ -872,8 +882,8 @@ Step 1: Create Metal Resources
     device = MTLCreateSystemDefaultDevice()
     commandQueue = [device newCommandQueue]
 
-    for each MPSGraphNet instance:
-        graph = [[MPSGraph alloc] init]
+    for each MetalNet instance:
+        graph = [[MPSGraph alloc] init]  // internal implementation
 
 
 Step 2: Assign Names to Blobs
@@ -887,25 +897,25 @@ Step 2: Assign Names to Blobs
 Step 3: Build Graph Layer by Layer
 ───────────────────────────────────
 
-    Ptr<MPSGraphNet> currentNet;
+    Ptr<MetalNet> currentNet;
 
     for each layer in topological order:
         │
-        ├─ Check if layer supports MPSGraph
-        │  if (!layer->supportBackend(DNN_BACKEND_MPSGRAPH))
+        ├─ Check if layer supports Metal backend
+        │  if (!layer->supportBackend(DNN_BACKEND_METAL))
         │      ├─ Finalize current graph (if exists)
         │      ├─ Fall back to CPU for this layer
-        │      └─ Create new MPSGraphNet for next MPSGraph layers
+        │      └─ Create new MetalNet for next Metal layers
         │
-        ├─ Create new MPSGraphNet if needed
+        ├─ Create new MetalNet if needed
         │  if (currentNet.empty() || needNewGraph)
-        │      currentNet = Ptr<MPSGraphNet>(new MPSGraphNet())
+        │      currentNet = Ptr<MetalNet>(new MetalNet())
         │
         ├─ Get input tensors from previous layers
         │  inputNodes = get_input_nodes(layer.inputBlobsId)
         │
-        ├─ Call layer-specific MPSGraph initialization
-        │  node = layer->initMPSGraph(inputBlobsWrappers, inputNodes)
+        ├─ Call layer-specific Metal initialization
+        │  node = layer->initMetal(inputBlobsWrappers, inputNodes)
         │  │
         │  │  Example for Convolution:
         │  │
@@ -930,11 +940,11 @@ Step 3: Build Graph Layer by Layer
         │  │                                descriptor:desc
         │  │                                      name:@"conv"];
         │  │
-        │  │  return Ptr<MPSGraphBackendNode>(
-        │  │      new MPSGraphBackendNode(output));
+        │  │  return Ptr<MetalBackendNode>(
+        │  │      new MetalBackendNode(output));
         │
         ├─ Store node in layer's backend nodes
-        │  layer.backendNodes[DNN_BACKEND_MPSGRAPH] = node
+        │  layer.backendNodes[DNN_BACKEND_METAL] = node
         │
         └─ Track outputs for this graph
            if (layer is output layer || has CPU consumers)
@@ -944,11 +954,11 @@ Step 3: Build Graph Layer by Layer
 Step 4: Compile Graphs
 ──────────────────────
 
-    for each MPSGraphNet instance:
+    for each MetalNet instance:
         if (!net->isInitialized())
             net->compileWithTarget(target)
             │
-            └─► Create MPSGraphExecutable
+            └─► Create MPSGraphExecutable (internal)
                 (Optimized and cached for reuse)
 ```
 
@@ -984,12 +994,12 @@ descriptor.dataLayout = MPSGraphTensorNamedDataLayoutNCHW;
 
 ### 9.1 Unit Tests
 
-**File:** `modules/dnn/test/test_mpsgraph.cpp`
+**File:** `modules/dnn/test/test_metal.cpp`
 
 ```cpp
-TEST(DNN_MPSGraph, BasicInference) {
+TEST(DNN_Metal, BasicInference) {
     Net net = readNetFromONNX("mobilenet_v2.onnx");
-    net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);
+    net.setPreferableBackend(DNN_BACKEND_METAL);
     net.setPreferableTarget(DNN_TARGET_OPENCL);
 
     Mat input(224, 224, CV_8UC3);
@@ -1005,9 +1015,9 @@ TEST(DNN_MPSGraph, BasicInference) {
     ASSERT_EQ(output.size[1], 1000);
 }
 
-TEST(DNN_MPSGraph, AccuracyVsCPU) {
+TEST(DNN_Metal, AccuracyVsCPU) {
     Net netGPU = readNetFromONNX("resnet50.onnx");
-    netGPU.setPreferableBackend(DNN_BACKEND_MPSGRAPH);
+    netGPU.setPreferableBackend(DNN_BACKEND_METAL);
 
     Net netCPU = readNetFromONNX("resnet50.onnx");
     netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
@@ -1029,7 +1039,7 @@ TEST(DNN_MPSGraph, AccuracyVsCPU) {
 ### 9.2 Layer-Specific Tests
 
 ```cpp
-TEST(DNN_MPSGraph, ConvolutionLayer) {
+TEST(DNN_Metal, ConvolutionLayer) {
     // Test various convolution configurations
     // - Different kernel sizes
     // - Different strides
@@ -1038,7 +1048,7 @@ TEST(DNN_MPSGraph, ConvolutionLayer) {
     // - Dilation
 }
 
-TEST(DNN_MPSGraph, PoolingLayer) {
+TEST(DNN_Metal, PoolingLayer) {
     // Max pooling
     // Average pooling
     // Different kernel sizes
@@ -1050,29 +1060,29 @@ TEST(DNN_MPSGraph, PoolingLayer) {
 ### 9.3 Model Zoo Tests
 
 ```cpp
-TEST(DNN_MPSGraph, ResNet50_ImageNet) {
+TEST(DNN_Metal, ResNet50_ImageNet) {
     // Full ImageNet inference
     // Compare accuracy with ground truth
 }
 
-TEST(DNN_MPSGraph, MobileNetV2_Performance) {
+TEST(DNN_Metal, MobileNetV2_Performance) {
     // Measure FPS
     // Compare with CPU baseline
 }
 
-TEST(DNN_MPSGraph, YOLOv5_COCO) {
+TEST(DNN_Metal, YOLOv5_COCO) {
     // Detection accuracy (mAP)
 }
 ```
 
 ### 9.4 Performance Benchmarks
 
-**File:** `modules/dnn/perf/perf_mpsgraph.cpp`
+**File:** `modules/dnn/perf/perf_metal.cpp`
 
 ```cpp
-PERF_TEST(DNN_MPSGraph, ResNet50_Throughput) {
+PERF_TEST(DNN_Metal, ResNet50_Throughput) {
     Net net = readNetFromONNX("resnet50.onnx");
-    net.setPreferableBackend(DNN_BACKEND_MPSGRAPH);
+    net.setPreferableBackend(DNN_BACKEND_METAL);
 
     Mat input(224, 224, CV_8UC3);
     Mat blob = blobFromImage(input, 1.0/255, Size(224,224));
@@ -1089,8 +1099,8 @@ PERF_TEST(DNN_MPSGraph, ResNet50_Throughput) {
 ### 9.5 Continuous Integration
 
 ```yaml
-# .github/workflows/mpsgraph_ci.yml
-name: MPSGraph Backend CI
+# .github/workflows/metal_ci.yml
+name: Metal Backend CI
 
 on: [push, pull_request]
 
@@ -1100,10 +1110,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Build OpenCV with MPSGraph
+      - name: Build OpenCV with Metal backend
         run: |
           mkdir build && cd build
-          cmake -DWITH_MPSGRAPH=ON \
+          cmake -DWITH_METAL=ON \
                 -DBUILD_TESTS=ON \
                 -DBUILD_PERF_TESTS=ON \
                 ..
@@ -1112,12 +1122,12 @@ jobs:
       - name: Run Unit Tests
         run: |
           cd build
-          ./bin/opencv_test_dnn --gtest_filter="*MPSGraph*"
+          ./bin/opencv_test_dnn --gtest_filter="*Metal*"
 
       - name: Run Performance Tests
         run: |
           cd build
-          ./bin/opencv_perf_dnn --gtest_filter="*MPSGraph*"
+          ./bin/opencv_perf_dnn --gtest_filter="*Metal*"
 ```
 
 ---
@@ -1127,7 +1137,7 @@ jobs:
 ### 10.1 Graph Compilation
 
 ```objc
-// In MPSGraphNet::compileWithTarget()
+// In MetalNet::compileWithTarget() - internal MPSGraph compilation
 
 - (void)compileWithTarget:(int)targetId {
     // Build feed dictionary with shapes
@@ -1221,19 +1231,21 @@ int getOptimalBatchSize(id<MTLDevice> device) {
 
 ### 11.1 Similarities (Reusable Patterns)
 
-| Aspect | WebNN | MPSGraph | Reuse Strategy |
-|--------|-------|----------|----------------|
+| Aspect | WebNN | Metal (MPSGraph) | Reuse Strategy |
+|--------|-------|------------------|----------------|
 | **Architecture** | Graph-based | Graph-based | Copy overall structure |
-| **Initialization** | `initWebnnBackend()` | `initMPSGraphBackend()` | Adapt function names |
-| **Node Type** | `WebnnBackendNode` | `MPSGraphBackendNode` | Copy class structure |
-| **Wrapper Type** | `WebnnBackendWrapper` | `MPSGraphBackendWrapper` | Copy class structure |
-| **Net Type** | `WebnnNet` | `MPSGraphNet` | Copy class structure |
-| **Layer Interface** | `initWebnn()` | `initMPSGraph()` | Same pattern |
+| **Initialization** | `initWebnnBackend()` | `initMetalBackend()` | Adapt function names |
+| **Node Type** | `WebnnBackendNode` | `MetalBackendNode` | Copy class structure |
+| **Wrapper Type** | `WebnnBackendWrapper` | `MetalBackendWrapper` | Copy class structure |
+| **Net Type** | `WebnnNet` | `MetalNet` | Copy class structure |
+| **Layer Interface** | `initWebnn()` | `initMetal()` | Same pattern |
 
 ### 11.2 Key Differences
 
-| Aspect | WebNN | MPSGraph | Migration Notes |
-|--------|-------|----------|-----------------|
+| Aspect | WebNN | Metal (MPSGraph) | Migration Notes |
+|--------|-------|------------------|-----------------|
+| **Public API** | `DNN_BACKEND_WEBNN` | `DNN_BACKEND_METAL` | User-facing API name |
+| **Implementation** | WebNN framework | MPSGraph framework | Internal detail |
 | **Language** | C++ | Objective-C++ | `.mm` files required |
 | **Graph API** | `ml::GraphBuilder` | `MPSGraph` | Different API syntax |
 | **Tensor Type** | `ml::Operand` | `MPSGraphTensor*` | Opaque pointer in C++ |
@@ -1243,19 +1255,19 @@ int getOptimalBatchSize(id<MTLDevice> device) {
 
 ### 11.3 Code Migration Checklist
 
-**From `op_webnn.hpp/cpp` to `op_mpsgraph.hpp/mm`:**
+**From `op_webnn.hpp/cpp` to `op_metal.hpp/mm`:**
 
 1. ✅ Copy file structure
-2. ✅ Rename classes (Webnn → MPSGraph)
+2. ✅ Rename classes (Webnn → Metal for public API)
 3. ✅ Change file extension (`.cpp` → `.mm` for implementation)
-4. ✅ Replace WebNN API calls with MPSGraph Objective-C API
+4. ✅ Replace WebNN API calls with MPSGraph Objective-C API (internal)
 5. ✅ Update memory management (WebNN → Metal buffers)
 6. ✅ Adapt graph building logic
 7. ✅ Update execution flow
 8. ✅ Add `@autoreleasepool` where needed
 9. ✅ Handle Objective-C/C++ bridging
 
-**Example: WebNN → MPSGraph**
+**Example: WebNN → Metal/MPSGraph**
 
 ```cpp
 // WebNN (op_webnn.cpp)
@@ -1275,7 +1287,7 @@ ml::Operand BuildConstant(const ml::GraphBuilder& builder,
 ```
 
 ```objc
-// MPSGraph (op_mpsgraph.mm)
+// Metal backend (op_metal.mm) - using MPSGraph internally
 MPSGraphTensor* BuildConstant(MPSGraph* graph,
                               NSArray<NSNumber*>* shape,
                               const void* value,
@@ -1443,18 +1455,18 @@ Documentation
    - Setup CMake build
 
 2. **Create File Structure**
-   - Create `op_mpsgraph.hpp`
-   - Create `op_mpsgraph.mm`
-   - Create `OpenCVDetectMPSGraph.cmake`
+   - Create `op_metal.hpp` (public API header)
+   - Create `op_metal.mm` (implementation using MPSGraph)
+   - Create `OpenCVDetectMetal.cmake` (build detection)
 
 3. **Initial Implementation**
-   - Implement `MPSGraphNet` skeleton
-   - Implement `MPSGraphBackendNode`
-   - Implement `MPSGraphBackendWrapper`
-   - Add backend enumeration
+   - Implement `MetalNet` skeleton (wraps MPSGraph internally)
+   - Implement `MetalBackendNode`
+   - Implement `MetalBackendWrapper`
+   - Add backend enumeration (`DNN_BACKEND_METAL`)
 
 4. **Build System**
-   - Add CMake detection
+   - Add CMake detection (`WITH_METAL` option)
    - Test compilation on macOS
    - Verify framework linking
 
@@ -1469,10 +1481,10 @@ Documentation
 ### Documentation Plan
 
 1. **API Documentation** - Inline doxygen comments
-2. **User Guide** - How to use MPSGraph backend
-3. **Developer Guide** - How to add new layers
-4. **Performance Guide** - Optimization tips
-5. **Migration Guide** - From CPU/OpenCL to MPSGraph
+2. **User Guide** - How to use Metal backend (DNN_BACKEND_METAL)
+3. **Developer Guide** - How to add new layers with initMetal()
+4. **Performance Guide** - Optimization tips for Metal/MPSGraph
+5. **Migration Guide** - From CPU/OpenCL to Metal backend
 
 ---
 
@@ -1499,35 +1511,37 @@ Documentation
 
 ## APPENDIX A: Layer Implementation Template
 
-### Template: initMPSGraph() for New Layer
+### Template: initMetal() for New Layer
 
 ```cpp
 // In layer_name.cpp
+// Public API method - internally uses MPSGraph
 
-virtual Ptr<BackendNode> initMPSGraph(
+virtual Ptr<BackendNode> initMetal(
     const std::vector<Ptr<BackendWrapper>>& inputs,
     const std::vector<Ptr<BackendNode>>& nodes) CV_OVERRIDE
 {
     CV_Assert(!nodes.empty());
 
     // Get input tensor from previous layer
-    Ptr<MPSGraphBackendNode> inputNode = nodes[0].dynamicCast<MPSGraphBackendNode>();
+    Ptr<MetalBackendNode> inputNode = nodes[0].dynamicCast<MetalBackendNode>();
     CV_Assert(!inputNode.empty());
 
     @autoreleasepool {
+        // Internal: access MPSGraph implementation details
         MPSGraphTensor* inputTensor = (__bridge MPSGraphTensor*)inputNode->tensor;
         MPSGraph* graph = (__bridge MPSGraph*)inputNode->net->getGraph();
 
         // TODO: Implement layer-specific logic
         // 1. Extract layer parameters
-        // 2. Create MPSGraph operations
-        // 3. Return new MPSGraphBackendNode
+        // 2. Create MPSGraph operations (internal)
+        // 3. Return new MetalBackendNode
 
         MPSGraphTensor* outputTensor = /* ... */;
 
         void* outputTensorPtr = (__bridge_retained void*)outputTensor;
-        Ptr<MPSGraphBackendNode> outputNode =
-            Ptr<MPSGraphBackendNode>(new MPSGraphBackendNode(outputTensorPtr));
+        Ptr<MetalBackendNode> outputNode =
+            Ptr<MetalBackendNode>(new MetalBackendNode(outputTensorPtr));
         outputNode->net = inputNode->net;
 
         return outputNode;
@@ -1544,7 +1558,7 @@ virtual Ptr<BackendNode> initMPSGraph(
 ```bash
 mkdir build && cd build
 
-cmake -DWITH_MPSGRAPH=ON \
+cmake -DWITH_METAL=ON \
       -DBUILD_opencv_dnn=ON \
       -DBUILD_TESTS=ON \
       -DCMAKE_BUILD_TYPE=Release \
@@ -1558,7 +1572,7 @@ make -j$(sysctl -n hw.ncpu)
 
 ```bash
 python platforms/ios/build_framework.py \
-    --with_mpsgraph \
+    --with_metal \
     --out ./ios_build
 
 # Framework will be in ios_build/opencv2.framework
@@ -1568,7 +1582,7 @@ python platforms/ios/build_framework.py \
 
 ```bash
 cmake -G Xcode \
-      -DWITH_MPSGRAPH=ON \
+      -DWITH_METAL=ON \
       -DBUILD_opencv_dnn=ON \
       ..
 
@@ -1580,3 +1594,5 @@ open OpenCV.xcodeproj
 **END OF TECHNICAL PLAN**
 
 *This plan is a living document and should be updated as implementation progresses.*
+
+**Note:** The Metal backend uses Apple's MPSGraph framework internally as an implementation detail. All public-facing APIs use "Metal" naming for clarity and abstraction.
