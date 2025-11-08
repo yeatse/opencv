@@ -6,8 +6,9 @@ if(APPLE)
         # Check for Metal framework
         find_library(METAL_FRAMEWORK Metal)
         find_library(MPSGRAPH_FRAMEWORK MetalPerformanceShadersGraph)
+        find_library(FOUNDATION_FRAMEWORK Foundation)
 
-        if(METAL_FRAMEWORK AND MPSGRAPH_FRAMEWORK)
+        if(METAL_FRAMEWORK AND MPSGRAPH_FRAMEWORK AND FOUNDATION_FRAMEWORK)
             # Check minimum OS version
             # MPSGraph requires iOS 14+, macOS 11+, tvOS 14+, visionOS 1+
 
@@ -16,7 +17,7 @@ if(APPLE)
                 "${OpenCV_BINARY_DIR}"
                 SOURCES "${OpenCV_SOURCE_DIR}/cmake/checks/metal.mm"
                 CMAKE_FLAGS
-                    "-DLINK_LIBRARIES:STRING=${METAL_FRAMEWORK};${MPSGRAPH_FRAMEWORK}"
+                    "-DLINK_LIBRARIES:STRING=${FOUNDATION_FRAMEWORK};${METAL_FRAMEWORK};${MPSGRAPH_FRAMEWORK}"
                 OUTPUT_VARIABLE TRY_OUT
             )
 

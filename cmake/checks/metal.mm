@@ -1,5 +1,5 @@
-@import Metal;
-@import MetalPerformanceShadersGraph;
+#import <Metal/Metal.h>
+#import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
 int main() {
     @autoreleasepool {
