@@ -11,8 +11,7 @@
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
-namespace cv { namespace dnn {
-
+// Objective-C declarations must be at global scope
 // Internal implementation class (uses MPSGraph)
 @interface MPSGraphNetImpl : NSObject
 
@@ -57,6 +56,9 @@ namespace cv { namespace dnn {
 }
 
 @end
+
+// C++ implementation
+namespace cv { namespace dnn {
 
 // MetalNet implementation
 MetalNet::MetalNet() : impl(nullptr), hasNetOwner(false), isInit(false) {
@@ -127,8 +129,8 @@ void MetalNet::addBlobs(const std::vector<cv::Ptr<BackendWrapper>>& ptrs) {
 void MetalNet::reset() {
     if (impl) {
         @autoreleasepool {
-            MPSGraphNetImpl* netImpl = (__bridge_transfer MPSGraphNetImpl*)impl;
-            netImpl = nil;
+            // Transfer ownership and release
+            (void)(__bridge_transfer MPSGraphNetImpl*)impl;
             impl = nullptr;
         }
     }
@@ -158,13 +160,13 @@ MetalBackendWrapper::MetalBackendWrapper(int targetId, Mat& m)
 MetalBackendWrapper::~MetalBackendWrapper() {
     @autoreleasepool {
         if (metalBuffer) {
-            id<MTLBuffer> buffer = (__bridge_transfer id<MTLBuffer>)metalBuffer;
-            buffer = nil;
+            // Transfer ownership and release
+            (void)(__bridge_transfer id<MTLBuffer>)metalBuffer;
             metalBuffer = nullptr;
         }
         if (tensorData) {
-            MPSGraphTensorData* data = (__bridge_transfer MPSGraphTensorData*)tensorData;
-            data = nil;
+            // Transfer ownership and release
+            (void)(__bridge_transfer MPSGraphTensorData*)tensorData;
             tensorData = nullptr;
         }
     }
