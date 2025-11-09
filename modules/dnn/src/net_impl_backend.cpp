@@ -14,6 +14,10 @@
 #include "cuda4dnn/init.hpp"
 #endif
 
+#ifdef HAVE_METAL
+#include "op_metal.hpp"
+#endif
+
 namespace cv {
 namespace dnn {
 CV__DNN_INLINE_NS_BEGIN
@@ -94,6 +98,12 @@ Ptr<BackendWrapper> Net::Impl::wrap(Mat& host)
         {
             CV_Assert(0 && "Internal error: DNN_BACKEND_CANN must be implemented through inheritance");
         }
+        else if (preferableBackend == DNN_BACKEND_METAL)
+        {
+#ifdef HAVE_METAL
+            return wrapMat(preferableBackend, preferableTarget, host);
+#endif
+        }
         else
             CV_Error(Error::StsNotImplemented, "Unknown backend identifier");
     }
@@ -158,6 +168,15 @@ void Net::Impl::initBackend(const std::vector<LayerPin>& blobsToKeep_)
     else if (preferableBackend == DNN_BACKEND_CANN)
     {
         CV_Assert(0 && "Internal error: DNN_BACKEND_CANN must be implemented through inheritance");
+    }
+    else if (preferableBackend == DNN_BACKEND_METAL)
+    {
+#ifdef HAVE_METAL
+        // Metal backend initialization happens lazily during layer processing
+        CV_Assert(haveMetal());
+#else
+        CV_Error(Error::StsNotImplemented, "This OpenCV version is built without support of Metal");
+#endif
     }
     else
     {
