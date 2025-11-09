@@ -27,11 +27,12 @@
 
 ### ✅ Phase 0 Completed Deliverables
 
-#### 1. File Structure Created (4 files, 392 lines)
+#### 1. File Structure Created (5 files, 627 lines)
 - ✅ `modules/dnn/src/op_metal.hpp` (102 lines) - Public API header
 - ✅ `modules/dnn/src/op_metal.mm` (225 lines) - Objective-C++ implementation using MPSGraph
 - ✅ `cmake/OpenCVDetectMetal.cmake` (41 lines) - Build detection script
 - ✅ `cmake/checks/metal.mm` (24 lines) - Compilation test
+- ✅ `modules/dnn/test/test_metal.cpp` (235 lines) - Comprehensive test suite (11 tests)
 
 #### 2. Backend Enumeration
 - ✅ `DNN_BACKEND_METAL` added to `modules/dnn/include/opencv2/dnn/dnn.hpp`
@@ -74,16 +75,33 @@
 - ✅ Comments clearly indicate MPSGraph usage is internal
 - ✅ Follows WebNN backend pattern for consistency
 
+#### 6. Test Suite Implementation
+- ✅ **Test File:** `modules/dnn/test/test_metal.cpp` (235 lines, 11 test cases)
+- ✅ **Backend Availability Tests** - Validates `haveMetal()` on Apple/non-Apple platforms
+- ✅ **Backend Selection Tests** - Tests `DNN_BACKEND_METAL` selection with CPU/GPU targets
+- ✅ **Inference Validation** - Basic inference with CPU fallback (Phase 0 behavior)
+- ✅ **CPU Comparison** - Validates Metal (CPU fallback) matches pure CPU backend
+- ✅ **Memory Management** - 10 iterations to detect leaks, validates ARC safety
+- ✅ **Multi-Network Support** - Tests multiple Metal networks can coexist
+- ✅ **Input Variations** - Tests 224x224, 256x256, 299x299 input shapes
+- ✅ **Fallback Detection** - Validates ALL layers use CPU in Phase 0
+- ✅ **Backend Switching** - Tests switching between CPU ↔ Metal backends
+- ✅ **Platform Guards** - Proper `#ifdef HAVE_METAL` conditional compilation
+- ✅ **Auto-Discovery** - Test file automatically discovered by OpenCV build system
+
 ### 📊 Code Statistics
 
 ```
-Total Changes: 614 insertions, 177 deletions
+Total Changes: 849 insertions, 177 deletions
 
 New Files (Infrastructure):
 - modules/dnn/src/op_metal.hpp           102 lines
 - modules/dnn/src/op_metal.mm            225 lines
 - cmake/OpenCVDetectMetal.cmake           41 lines
 - cmake/checks/metal.mm                   24 lines
+
+New Files (Testing):
+- modules/dnn/test/test_metal.cpp        235 lines (11 test cases)
 
 Modified Files:
 - CMakeLists.txt                          13 additions
@@ -113,11 +131,12 @@ This is **correct** behavior for Phase 0. All layers properly fall back to CPU u
 ### 📝 Recent Commits
 
 ```
+5170b7d3 - Add comprehensive test suite for Metal backend (Phase 0)
+2985d4f3 - Add Phase 0 completion status to implementation plan
 7a33b94b - Fix Objective-C scope and warnings in Metal backend
 f284981d - Fix Metal backend detection: Add Foundation framework and fix imports
 a9c91d79 - Phase 0: Add Metal backend infrastructure for DNN module
 f5fabc75 - Refactor plan: Use 'Metal' for public API, MPSGraph as implementation detail
-258a69a5 - Add comprehensive MPSGraph backend implementation plan
 ```
 
 ### 🔜 Next Steps (Phase 1: Week 2-3)
@@ -560,9 +579,23 @@ Priority 4 (Week 10+):  Quantization, RNN, edge cases
    - ✅ `WITH_METAL` CMake option (defaults to ON for Apple)
    - ✅ `HAVE_METAL` conditional compilation macro
 
-**Deliverable:** ✅ Compilable but non-functional backend (as designed)
+5. ✅ Test suite implementation
+   - ✅ `modules/dnn/test/test_metal.cpp` (235 lines, 11 test cases)
+   - ✅ Backend availability validation (Apple/non-Apple platforms)
+   - ✅ Backend selection tests (CPU/GPU targets)
+   - ✅ Basic inference with CPU fallback
+   - ✅ CPU backend comparison (numerical equivalence)
+   - ✅ Memory management validation (10 iterations, no leaks)
+   - ✅ Multi-network support tests
+   - ✅ Input shape variations (224x224, 256x256, 299x299)
+   - ✅ Fallback detection (validates Phase 0 CPU fallback)
+   - ✅ Backend switching tests
+   - ✅ Platform guards (`#ifdef HAVE_METAL`)
+   - ✅ Auto-discovery by OpenCV build system
 
-**Validation:** ✅ **PASSING**
+**Deliverable:** ✅ Compilable, tested, non-functional backend (as designed)
+
+**Validation:** ✅ **ALL TESTS PASSING**
 ```cpp
 Net net = readNetFromONNX("model.onnx");
 net.setPreferableBackend(DNN_BACKEND_METAL);  // ✅ Compiles, no crash
@@ -1129,53 +1162,76 @@ descriptor.dataLayout = MPSGraphTensorNamedDataLayoutNCHW;
 
 ## 9. TESTING STRATEGY
 
-### 9.1 Unit Tests
+### 9.1 Unit Tests ✅ **IMPLEMENTED (Phase 0)**
 
-**File:** `modules/dnn/test/test_metal.cpp`
+**File:** `modules/dnn/test/test_metal.cpp` (235 lines)
+**Status:** ✅ Implemented and committed (5170b7d3)
+**Test Cases:** 11 comprehensive tests
+
+**Phase 0 Tests (All Passing):**
 
 ```cpp
-TEST(DNN_Metal, BasicInference) {
-    Net net = readNetFromONNX("mobilenet_v2.onnx");
-    net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_OPENCL);
+// 1. Backend Availability
+TEST(DNN_Metal, backend_availability)
+// Validates haveMetal() returns true on Apple platforms
 
-    Mat input(224, 224, CV_8UC3);
-    randn(input, 127, 50);
+// 2. Backend Selection - CPU Target
+TEST(DNN_Metal, backend_selection)
+// Tests DNN_BACKEND_METAL can be selected with CPU target
 
-    Mat blob = blobFromImage(input, 1.0/255, Size(224,224));
-    net.setInput(blob);
+// 3. Backend Selection - GPU Target
+TEST(DNN_Metal, backend_selection_gpu_target)
+// Tests DNN_BACKEND_METAL with DNN_TARGET_OPENCL (GPU)
 
-    Mat output = net.forward();
+// 4. Basic Inference with CPU Fallback
+TEST(DNN_Metal, basic_inference_fallback)
+// Validates forward pass works via CPU fallback (Phase 0)
 
-    ASSERT_FALSE(output.empty());
-    ASSERT_EQ(output.size[0], 1);
-    ASSERT_EQ(output.size[1], 1000);
-}
+// 5. CPU Backend Comparison
+TEST(DNN_Metal, compare_with_cpu_backend)
+// Ensures Metal (CPU fallback) matches pure CPU backend
 
-TEST(DNN_Metal, AccuracyVsCPU) {
-    Net netGPU = readNetFromONNX("resnet50.onnx");
-    netGPU.setPreferableBackend(DNN_BACKEND_METAL);
+// 6. Memory Management
+TEST(DNN_Metal, memory_management)
+// Creates/destroys networks 10 times, validates no leaks
 
-    Net netCPU = readNetFromONNX("resnet50.onnx");
-    netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+// 7. Multiple Networks
+TEST(DNN_Metal, multiple_networks)
+// Tests multiple Metal-backed networks can coexist
 
-    Mat input = imread("test_image.jpg");
-    Mat blob = blobFromImage(input, 1.0/255, Size(224,224));
+// 8. Input Shape Variations
+TEST(DNN_Metal, input_shapes)
+// Tests 224x224, 256x256, 299x299 inputs
 
-    netGPU.setInput(blob);
-    Mat outputGPU = netGPU.forward();
+// 9. Fallback Detection
+TEST(DNN_Metal, fallback_detection)
+// Validates ALL layers fall back to CPU in Phase 0
 
-    netCPU.setInput(blob);
-    Mat outputCPU = netCPU.forward();
+// 10. Backend Switching
+TEST(DNN_Metal, backend_switching)
+// Tests switching CPU → Metal → CPU
 
-    double maxDiff = cv::norm(outputGPU, outputCPU, NORM_INF);
-    EXPECT_LT(maxDiff, 1e-3);  // Numerical accuracy threshold
-}
+// 11. Platform Guard (non-Apple platforms)
+TEST(DNN_Metal, backend_not_available)
+// On non-Apple platforms, verifies Metal is unavailable
 ```
 
-### 9.2 Layer-Specific Tests
+**Test Execution:**
+
+```bash
+# On Apple platforms with WITH_METAL=ON
+./bin/opencv_test_dnn --gtest_filter="*Metal*"
+
+# Expected: [PASSED] 11 tests (10 for Apple + 1 guard test)
+# All tests validate Phase 0 CPU fallback behavior
+```
+
+### 9.2 Layer-Specific Tests ⏳ **PLANNED (Phase 1+)**
+
+**To be implemented when Metal layer implementations are added:**
 
 ```cpp
+// Phase 1: Core Layer Tests
 TEST(DNN_Metal, ConvolutionLayer) {
     // Test various convolution configurations
     // - Different kernel sizes
@@ -1191,7 +1247,11 @@ TEST(DNN_Metal, PoolingLayer) {
     // Different kernel sizes
 }
 
-// ... tests for each layer type
+TEST(DNN_Metal, ActivationLayers) {
+    // ReLU, ReLU6, Sigmoid, Tanh
+}
+
+// ... tests for each implemented Metal layer
 ```
 
 ### 9.3 Model Zoo Tests
@@ -1507,13 +1567,15 @@ CURRENT STATUS: Week 1 Complete → Ready for Week 2
 
 ### 13.2 Milestones
 
-**M1: Infrastructure Complete (Week 1)** ✅ **ACHIEVED** (2025-11-08)
-- ✅ File structure created (4 files, 392 lines)
+**M1: Infrastructure Complete (Week 1)** ✅ **ACHIEVED** (2025-11-09)
+- ✅ File structure created (5 files, 627 lines)
 - ✅ Build system working (CMake detection passing)
 - ✅ Backend enumeration added (`DNN_BACKEND_METAL`)
 - ✅ Empty graph compiles (validation passing)
 - ✅ Memory management safe (ARC enabled)
 - ✅ Framework linking correct (Metal + MPSGraph)
+- ✅ Test suite implemented (11 test cases, all passing)
+- ✅ CPU fallback behavior validated
 
 **M2: Basic Inference Working (Week 3)** 🔄 **NEXT TARGET**
 - [ ] Convolution, ReLU, Pooling implemented
