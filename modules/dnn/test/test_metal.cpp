@@ -45,7 +45,8 @@ TEST(DNN_Metal, basic_inference_fallback)
     net.setPreferableTarget(DNN_TARGET_CPU);
 
     // Create input
-    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    int sizes[] = {1, 3, 224, 224};
+    Mat input = Mat::ones(4, sizes, CV_32F);
     net.setInput(input);
 
     // Forward should work (via CPU fallback)
@@ -71,7 +72,8 @@ TEST(DNN_Metal, compare_with_cpu_backend)
     netCPU.setPreferableTarget(DNN_TARGET_CPU);
 
     // Create input
-    Mat input(1, 3, 224, 224, CV_32F);
+    int sizes[] = {1, 3, 224, 224};
+    Mat input(4, sizes, CV_32F);
     randn(input, 0.0f, 1.0f);
 
     // Run inference
@@ -96,7 +98,8 @@ TEST(DNN_Metal, memory_management)
         net.setPreferableBackend(DNN_BACKEND_METAL);
         net.setPreferableTarget(DNN_TARGET_CPU);
 
-        Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+        int sizes[] = {1, 3, 224, 224};
+        Mat input = Mat::ones(4, sizes, CV_32F);
         net.setInput(input);
 
         Mat output = net.forward();
@@ -119,7 +122,8 @@ TEST(DNN_Metal, multiple_networks)
     net2.setPreferableBackend(DNN_BACKEND_METAL);
     net2.setPreferableTarget(DNN_TARGET_CPU);
 
-    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    int sizes[] = {1, 3, 224, 224};
+    Mat input = Mat::ones(4, sizes, CV_32F);
 
     // Both networks should work independently
     net1.setInput(input);
@@ -150,7 +154,8 @@ TEST(DNN_Metal, input_shapes)
 
     for (const auto& size : sizes)
     {
-        Mat input = Mat::ones(1, 3, size.first, size.second, CV_32F);
+        int inputSizes[] = {1, 3, size.first, size.second};
+        Mat input = Mat::ones(4, inputSizes, CV_32F);
         net.setInput(input);
 
         Mat output;
@@ -168,7 +173,8 @@ TEST(DNN_Metal, fallback_detection)
     net.setPreferableBackend(DNN_BACKEND_METAL);
     net.setPreferableTarget(DNN_TARGET_CPU);
 
-    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    int sizes[] = {1, 3, 224, 224};
+    Mat input = Mat::ones(4, sizes, CV_32F);
     net.setInput(input);
     Mat output = net.forward();
 
@@ -199,7 +205,8 @@ TEST(DNN_Metal, backend_switching)
     // Test switching between backends
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
 
-    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    int sizes[] = {1, 3, 224, 224};
+    Mat input = Mat::ones(4, sizes, CV_32F);
 
     // Run with CPU backend
     net.setPreferableBackend(DNN_BACKEND_OPENCV);
