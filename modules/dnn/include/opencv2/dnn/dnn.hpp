@@ -370,6 +370,15 @@ CV__DNN_INLINE_NS_BEGIN
                                           const std::vector<Ptr<BackendWrapper> > &outputs,
                                           const std::vector<Ptr<BackendNode> >& nodes);
 
+        /**
+         * @brief Returns a Metal backend node
+         *
+         * @param   inputs   layer inputs
+         * @param   nodes    input nodes
+         */
+        virtual Ptr<BackendNode> initMetal(const std::vector<Ptr<BackendWrapper> > &inputs,
+                                           const std::vector<Ptr<BackendNode> >& nodes);
+
        /**
         * @brief Automatic Halide scheduling based on layer hyper-parameters.
         * @param[in] node Backend node with Halide functions.

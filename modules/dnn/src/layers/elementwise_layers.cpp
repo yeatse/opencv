@@ -347,6 +347,14 @@ struct BaseFunctor
     void getScaleShift(Mat&, Mat&) const {}
 
     bool tryQuantize(const std::vector<std::vector<float>>&, const std::vector<std::vector<int>>&, LayerParams&) { return false; }
+
+#ifdef HAVE_METAL
+    void* initMetalAPI(Ptr<MetalNet>&, void*, const std::string&)
+    {
+        CV_Error(Error::StsNotImplemented, "Metal backend not implemented for this layer");
+        return nullptr;
+    }
+#endif
 };
 
 struct ReLUFunctor : public BaseFunctor

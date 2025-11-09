@@ -95,7 +95,7 @@ public:
     size_t size;
     std::vector<int32_t> dimensions;
 
-private:
+    // Made public for forwardMetal() function access
     void allocateMetalBuffer();
     void syncToDevice();
     void syncToHost();

@@ -194,42 +194,22 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
             }
         }
 
-        // Compile graph if needed
-        if (!netImpl.isCompiled && netImpl.outputNames.count > 0) {
-            NSMutableArray<MPSGraphTensor*>* targetTensors = [NSMutableArray new];
-            for (NSString* outName in netImpl.outputNames) {
-                MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
-                if (outTensor) {
-                    [targetTensors addObject:outTensor];
-                }
-            }
-
-            if (targetTensors.count > 0) {
-                MPSGraphCompilationDescriptor* compDesc = [MPSGraphCompilationDescriptor new];
-                netImpl.executable = [netImpl.graph compileWithDevice:netImpl.device
-                                                                feeds:feeds
-                                                        targetTensors:targetTensors
-                                                     targetOperations:nil
-                                                compilationDescriptor:compDesc];
-                netImpl.isCompiled = YES;
+        // Compile graph if needed (using direct execution without precompilation for now)
+        NSMutableArray<MPSGraphTensor*>* targetTensors = [NSMutableArray new];
+        for (NSString* outName in netImpl.outputNames) {
+            MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
+            if (outTensor) {
+                [targetTensors addObject:outTensor];
             }
         }
 
-        // Execute graph
-        if (netImpl.executable) {
-            NSMutableArray<MPSGraphTensor*>* targetTensors = [NSMutableArray new];
-            for (NSString* outName in netImpl.outputNames) {
-                MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
-                if (outTensor) {
-                    [targetTensors addObject:outTensor];
-                }
-            }
-
+        // Execute graph using runWithMTLCommandQueue (direct execution)
+        if (targetTensors.count > 0) {
             NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results =
-                [netImpl.executable runWithMTLCommandQueue:netImpl.commandQueue
-                                                      feeds:feeds
-                                              targetTensors:targetTensors
-                                           targetOperations:nil];
+                [netImpl.graph runWithMTLCommandQueue:netImpl.commandQueue
+                                                feeds:feeds
+                                        targetTensors:targetTensors
+                                     targetOperations:nil];
 
             // Copy results back to output wrappers
             for (size_t i = 0; i < outBlobsWrappers.size() && i < netImpl.outputNames.count; i++) {
@@ -240,19 +220,18 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
                 MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
                 MPSGraphTensorData* resultData = results[outTensor];
 
-                if (resultData && resultData.mpsndarray.buffer) {
-                    // Store result buffer reference for later copying
-                    id<MTLBuffer> resultBuffer = resultData.mpsndarray.buffer;
-
+                if (resultData) {
                     // Ensure output wrapper has Metal buffer
                     if (!wrapper->metalBuffer) {
                         wrapper->allocateMetalBuffer();
                     }
 
-                    // Copy result data to output buffer
+                    // Get the underlying MTLBuffer from MPSGraphTensorData
                     id<MTLBuffer> outBuffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
-                    size_t copySize = MIN(resultBuffer.length, outBuffer.length);
-                    memcpy(outBuffer.contents, resultBuffer.contents, copySize);
+
+                    // Read data from MPSGraphTensorData using MPSNDArray's readBytes method
+                    MPSNDArray* resultArray = [resultData mpsndarray];
+                    [resultArray readBytes:outBuffer.contents strideBytes:nil];
 
                     // Sync back to host
                     wrapper->syncToHost();
