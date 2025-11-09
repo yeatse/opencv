@@ -83,8 +83,15 @@ void MetalNet::init(Target targetId) {
 }
 
 void MetalNet::createGraph(Target targetId) {
-    // Phase 0: Stub implementation
-    // Graph building will be implemented in Phase 1
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl) {
+            CV_Error(Error::StsError, "Metal network not initialized");
+        }
+
+        // Mark as initialized - graph operations are added by layer initMetal() methods
+        netImpl.isInitialized = YES;
+    }
 }
 
 void MetalNet::addOutput(const std::string& name) {
@@ -103,18 +110,156 @@ bool MetalNet::isInitialized() {
 
 std::vector<void*> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
                                         const std::vector<std::string>& names) {
-    // Phase 0: Stub implementation
-    // Input handling will be implemented in Phase 1
-    std::vector<void*> result;
-    return result;
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl) {
+            CV_Error(Error::StsError, "Metal network not initialized");
+        }
+
+        std::vector<void*> result;
+
+        // Store input names
+        inputNames.clear();
+        for (const auto& name : names) {
+            inputNames.push_back(name);
+        }
+
+        // Create placeholder tensors for inputs
+        for (size_t i = 0; i < inputs.size() && i < names.size(); i++) {
+            const cv::Mat& mat = inputs[i];
+            const std::string& name = names[i];
+
+            // Convert Mat dimensions to NSArray
+            NSMutableArray<NSNumber*>* shape = [NSMutableArray new];
+            for (int d = 0; d < mat.dims; d++) {
+                [shape addObject:@(mat.size[d])];
+            }
+
+            // Create placeholder tensor
+            MPSGraphTensor* tensor = [netImpl.graph placeholderWithShape:shape
+                                                                dataType:MPSDataTypeFloat32
+                                                                    name:[NSString stringWithUTF8String:name.c_str()]];
+
+            // Store in named tensors dictionary
+            netImpl.namedTensors[[NSString stringWithUTF8String:name.c_str()]] = tensor;
+
+            // Add to input names list
+            [netImpl.inputNames addObject:[NSString stringWithUTF8String:name.c_str()]];
+
+            // Return the tensor pointer
+            result.push_back((__bridge void*)tensor);
+        }
+
+        return result;
+    }
 }
 
 void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers, bool isAsync) {
-    // Phase 0: Stub implementation
-    // Forward pass will be implemented in Phase 1
-    CV_Error(Error::StsNotImplemented,
-             "Metal backend forward pass not implemented yet. "
-             "Layers should fall back to CPU implementation.");
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !netImpl.isInitialized) {
+            CV_Error(Error::StsError, "Metal network not initialized or no graph built");
+        }
+
+        // Prepare input feeds
+        NSMutableDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = [NSMutableDictionary new];
+
+        // Feed input data
+        for (const auto& blobEntry : allBlobs) {
+            MetalBackendWrapper* wrapper = blobEntry.second.get();
+            if (!wrapper) continue;
+
+            // Sync data to device
+            wrapper->syncToDevice();
+
+            // Create MPSGraphTensorData from Metal buffer
+            NSString* blobName = [NSString stringWithUTF8String:blobEntry.first.c_str()];
+            MPSGraphTensor* tensor = netImpl.namedTensors[blobName];
+
+            if (tensor && wrapper->metalBuffer) {
+                id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
+
+                // Convert dimensions to shape
+                NSMutableArray<NSNumber*>* shape = [NSMutableArray new];
+                for (int32_t dim : wrapper->dimensions) {
+                    [shape addObject:@(dim)];
+                }
+
+                MPSGraphTensorData* tensorData = [[MPSGraphTensorData alloc]
+                    initWithMTLBuffer:buffer
+                                shape:shape
+                             dataType:MPSDataTypeFloat32];
+
+                feeds[tensor] = tensorData;
+            }
+        }
+
+        // Compile graph if needed
+        if (!netImpl.isCompiled && netImpl.outputNames.count > 0) {
+            NSMutableArray<MPSGraphTensor*>* targetTensors = [NSMutableArray new];
+            for (NSString* outName in netImpl.outputNames) {
+                MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
+                if (outTensor) {
+                    [targetTensors addObject:outTensor];
+                }
+            }
+
+            if (targetTensors.count > 0) {
+                MPSGraphCompilationDescriptor* compDesc = [MPSGraphCompilationDescriptor new];
+                netImpl.executable = [netImpl.graph compileWithDevice:netImpl.device
+                                                                feeds:feeds
+                                                        targetTensors:targetTensors
+                                                     targetOperations:nil
+                                                compilationDescriptor:compDesc];
+                netImpl.isCompiled = YES;
+            }
+        }
+
+        // Execute graph
+        if (netImpl.executable) {
+            NSMutableArray<MPSGraphTensor*>* targetTensors = [NSMutableArray new];
+            for (NSString* outName in netImpl.outputNames) {
+                MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
+                if (outTensor) {
+                    [targetTensors addObject:outTensor];
+                }
+            }
+
+            NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results =
+                [netImpl.executable runWithMTLCommandQueue:netImpl.commandQueue
+                                                      feeds:feeds
+                                              targetTensors:targetTensors
+                                           targetOperations:nil];
+
+            // Copy results back to output wrappers
+            for (size_t i = 0; i < outBlobsWrappers.size() && i < netImpl.outputNames.count; i++) {
+                Ptr<MetalBackendWrapper> wrapper = outBlobsWrappers[i].dynamicCast<MetalBackendWrapper>();
+                if (wrapper.empty()) continue;
+
+                NSString* outName = netImpl.outputNames[i];
+                MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
+                MPSGraphTensorData* resultData = results[outTensor];
+
+                if (resultData && resultData.mpsndarray.buffer) {
+                    // Store result buffer reference for later copying
+                    id<MTLBuffer> resultBuffer = resultData.mpsndarray.buffer;
+
+                    // Ensure output wrapper has Metal buffer
+                    if (!wrapper->metalBuffer) {
+                        wrapper->allocateMetalBuffer();
+                    }
+
+                    // Copy result data to output buffer
+                    id<MTLBuffer> outBuffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
+                    size_t copySize = MIN(resultBuffer.length, outBuffer.length);
+                    memcpy(outBuffer.contents, resultBuffer.contents, copySize);
+
+                    // Sync back to host
+                    wrapper->syncToHost();
+                }
+            }
+        }
+    }
 }
 
 void MetalNet::addBlobs(const std::vector<cv::Ptr<BackendWrapper>>& ptrs) {
@@ -138,6 +283,111 @@ void MetalNet::reset() {
     inputNames.clear();
     outputNames.clear();
     isInit = false;
+}
+
+// Graph building helper methods
+void* MetalNet::getTensor(const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl) return nullptr;
+
+        NSString* nsName = [NSString stringWithUTF8String:name.c_str()];
+        MPSGraphTensor* tensor = netImpl.namedTensors[nsName];
+        return (__bridge void*)tensor;
+    }
+}
+
+void MetalNet::addTensor(const std::string& name, void* tensor) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor) return;
+
+        NSString* nsName = [NSString stringWithUTF8String:name.c_str()];
+        MPSGraphTensor* mpsTensor = (__bridge MPSGraphTensor*)tensor;
+        netImpl.namedTensors[nsName] = mpsTensor;
+    }
+}
+
+void* MetalNet::addReLU(void* inputTensor, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !inputTensor) return nullptr;
+
+        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
+        MPSGraphTensor* output = [netImpl.graph reLUWithTensor:input
+                                                          name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        addTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalNet::addAddition(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph additionWithPrimaryTensor:t1
+                                                          secondaryTensor:t2
+                                                                    name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        addTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalNet::addConv2D(void* inputTensor, void* weightsTensor, void* biasTensor,
+                           const std::vector<int>& strides, const std::vector<int>& paddings,
+                           const std::vector<int>& dilations, int groups, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !inputTensor || !weightsTensor) return nullptr;
+
+        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
+        MPSGraphTensor* weights = (__bridge MPSGraphTensor*)weightsTensor;
+
+        // Create convolution descriptor
+        MPSGraphConvolution2DOpDescriptor* desc = [MPSGraphConvolution2DOpDescriptor descriptorWithStrideInX:strides.size() > 1 ? strides[1] : 1
+                                                                                                   strideInY:strides.size() > 0 ? strides[0] : 1
+                                                                                             dilationRateInX:dilations.size() > 1 ? dilations[1] : 1
+                                                                                             dilationRateInY:dilations.size() > 0 ? dilations[0] : 1
+                                                                                                      groups:groups
+                                                                                                paddingStyle:MPSGraphPaddingStyleExplicit
+                                                                                                  dataLayout:MPSGraphTensorNamedDataLayoutNCHW
+                                                                                               weightsLayout:MPSGraphTensorNamedDataLayoutOIHW];
+
+        // Set explicit padding
+        if (paddings.size() >= 4) {
+            desc.paddingLeft = paddings[1];
+            desc.paddingRight = paddings[3];
+            desc.paddingTop = paddings[0];
+            desc.paddingBottom = paddings[2];
+        }
+
+        MPSGraphTensor* output = [netImpl.graph convolution2DWithSourceTensor:input
+                                                               weightsTensor:weights
+                                                                  descriptor:desc
+                                                                        name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Add bias if present
+        if (biasTensor) {
+            MPSGraphTensor* bias = (__bridge MPSGraphTensor*)biasTensor;
+            output = [netImpl.graph additionWithPrimaryTensor:output
+                                              secondaryTensor:bias
+                                                         name:[NSString stringWithFormat:@"%s_bias", name.c_str()]];
+        }
+
+        // Store named tensor
+        addTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
 }
 
 // MetalBackendNode implementation
@@ -173,8 +423,7 @@ MetalBackendWrapper::~MetalBackendWrapper() {
 }
 
 void MetalBackendWrapper::copyToHost() {
-    // Phase 0: Stub implementation
-    // Data transfer will be implemented in Phase 1
+    syncToHost();
 }
 
 void MetalBackendWrapper::setHostDirty() {
@@ -183,18 +432,51 @@ void MetalBackendWrapper::setHostDirty() {
 }
 
 void MetalBackendWrapper::allocateMetalBuffer() {
-    // Phase 0: Stub implementation
-    // Buffer allocation will be implemented in Phase 1
+    @autoreleasepool {
+        if (!metalBuffer && size > 0) {
+            // Get Metal device from somewhere - for now, create default device
+            id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+            if (!device) {
+                CV_Error(Error::StsError, "Metal device not available");
+            }
+
+            // Allocate Metal buffer
+            id<MTLBuffer> buffer = [device newBufferWithLength:size
+                                                       options:MTLResourceStorageModeShared];
+            if (!buffer) {
+                CV_Error(Error::StsError, "Failed to allocate Metal buffer");
+            }
+
+            metalBuffer = (__bridge_retained void*)buffer;
+        }
+    }
 }
 
 void MetalBackendWrapper::syncToDevice() {
-    // Phase 0: Stub implementation
-    // Data sync will be implemented in Phase 1
+    @autoreleasepool {
+        if (!host || !host->data) return;
+
+        // Allocate Metal buffer if needed
+        if (!metalBuffer) {
+            allocateMetalBuffer();
+        }
+
+        // Copy data from host Mat to Metal buffer
+        id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)metalBuffer;
+        memcpy(buffer.contents, host->data, size);
+
+        // No explicit sync needed for MTLResourceStorageModeShared
+    }
 }
 
 void MetalBackendWrapper::syncToHost() {
-    // Phase 0: Stub implementation
-    // Data sync will be implemented in Phase 1
+    @autoreleasepool {
+        if (!host || !metalBuffer) return;
+
+        // Copy data from Metal buffer to host Mat
+        id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)metalBuffer;
+        memcpy(host->data, buffer.contents, size);
+    }
 }
 
 // Forward function
