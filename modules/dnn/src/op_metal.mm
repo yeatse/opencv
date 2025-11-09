@@ -593,7 +593,7 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
             // Create new network if needed
             if (net.empty()) {
                 net = Ptr<MetalNet>(new MetalNet());
-                net->init(preferableTarget);
+                net->init(static_cast<Target>(preferableTarget));
             }
 
             if (!fused) {
@@ -653,7 +653,7 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
         }
         else {
             net = Ptr<MetalNet>(new MetalNet());
-            net->init(preferableTarget);
+            net->init(static_cast<Target>(preferableTarget));
         }
 
         if (!fused)
@@ -711,7 +711,7 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
             Ptr<MetalBackendNode> metalNode = node.dynamicCast<MetalBackendNode>();
             if (!metalNode.empty() && !metalNode->net.empty())
             {
-                metalNode->net->createGraph(preferableTarget);
+                metalNode->net->createGraph(static_cast<Target>(preferableTarget));
             }
         }
     }
