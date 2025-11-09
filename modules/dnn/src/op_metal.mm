@@ -685,7 +685,8 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
             metalNode->name = ld.name;
             metalNode->net = net;
 
-            // Add to Metal network's blob management
+            // Add to Metal network's blob management (both inputs and outputs like WebNN)
+            net->addBlobs(ld.inputBlobsWrappers);
             net->addBlobs(ld.outputBlobsWrappers);
 
             // Share device from network to all wrappers
