@@ -231,6 +231,52 @@ TEST(DNN_Metal, backend_switching)
     normAssert(outputCPU, outputCPU2, "Backend switching back");
 }
 
+TEST(DNN_Metal, relu_layer)
+{
+    // Test ReLU activation layer with Metal backend
+    // Create a simple network with just ReLU
+    LayerParams lp;
+    lp.type = "ReLU";
+    lp.name = "testReLU";
+
+    Net net;
+    int id = net.addLayerToPrev(lp.name, lp.type, lp);
+
+    // Create input with both positive and negative values
+    int sizes[] = {1, 1, 4, 4};
+    Mat input(4, sizes, CV_32F);
+    float* data = input.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        data[i] = (float)(i - 8);  // Values from -8 to 7
+    }
+
+    // Test with CPU backend
+    net.setPreferableBackend(DNN_BACKEND_OPENCV);
+    net.setInput(input);
+    Mat outputCPU = net.forward();
+
+    // Test with Metal backend
+    net.setPreferableBackend(DNN_BACKEND_METAL);
+    net.setPreferableTarget(DNN_TARGET_CPU);
+    net.setInput(input);
+    Mat outputMetal = net.forward();
+
+    // Results should match
+    // ReLU should clamp negative values to 0
+    normAssert(outputCPU, outputMetal, "ReLU: Metal vs CPU");
+
+    // Verify ReLU behavior: max(0, x)
+    float* outData = outputMetal.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        float expected = std::max(0.0f, data[i]);
+        EXPECT_NEAR(expected, outData[i], 1e-5)
+            << "ReLU output mismatch at index " << i
+            << ": input=" << data[i]
+            << ", expected=" << expected
+            << ", got=" << outData[i];
+    }
+}
+
 #else  // !HAVE_METAL
 
 TEST(DNN_Metal, backend_not_available)

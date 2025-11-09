@@ -49,6 +49,7 @@
 #include "../op_vkcom.hpp"
 #include "../op_webnn.hpp"
 #include "../op_cann.hpp"
+#include "../op_metal.hpp"
 
 #include <opencv2/dnn/shape_utils.hpp>
 #include <iostream>
@@ -216,6 +217,28 @@ public:
     }
 #endif
 
+#ifdef HAVE_METAL
+    virtual Ptr<BackendNode> initMetal(const std::vector<Ptr<BackendWrapper> >& inputs, const std::vector<Ptr<BackendNode> >& nodes) CV_OVERRIDE
+    {
+        // Get input node
+        CV_Assert(nodes.size() > 0);
+        Ptr<MetalBackendNode> inputNode = nodes[0].dynamicCast<MetalBackendNode>();
+        CV_Assert(!inputNode.empty());
+
+        // Get the Metal network
+        Ptr<MetalNet> net = inputNode->net;
+
+        // Add ReLU operation to the graph
+        void* outputTensor = func.initMetalAPI(net, inputNode->tensor, Layer::name);
+
+        // Create output node
+        Ptr<MetalBackendNode> outputNode = Ptr<MetalBackendNode>(new MetalBackendNode(outputTensor));
+        outputNode->net = net;
+        outputNode->name = Layer::name;
+
+        return outputNode;
+    }
+#endif
 
     virtual bool tryFuse(Ptr<dnn::Layer>& top) CV_OVERRIDE
     {
@@ -346,6 +369,13 @@ struct ReLUFunctor : public BaseFunctor
             {
                 CV_LOG_WARNING(NULL, "PRELU is not supported now.");
             }
+            return slope == 0;
+        }
+#endif
+#ifdef HAVE_METAL
+        if (backendId == DNN_BACKEND_METAL) {
+            // Metal backend: support standard ReLU (slope == 0)
+            // TODO: support PReLU/Leaky ReLU (slope != 0)
             return slope == 0;
         }
 #endif
@@ -504,6 +534,14 @@ struct ReLUFunctor : public BaseFunctor
     ml::Operand initWebnnAPI(const ml::GraphBuilder& builder, const ml::Operand& input)
     {
         return builder.Relu(input);
+    }
+#endif
+
+#ifdef HAVE_METAL
+    void* initMetalAPI(Ptr<MetalNet>& net, void* inputTensor, const std::string& name)
+    {
+        // Use MetalNet::addReLU helper to add ReLU operation to the graph
+        return net->addReLU(inputTensor, name);
     }
 #endif
 
