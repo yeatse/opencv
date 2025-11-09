@@ -178,6 +178,11 @@ struct Net::Impl : public detail::NetImplBase
     void initWebnnBackend(const std::vector<LayerPin>& blobsToKeep_);
 #endif
 
+#ifdef HAVE_METAL
+    void addMetalOutputs(LayerData& ld);
+    void initMetalBackend(const std::vector<LayerPin>& blobsToKeep_);
+#endif
+
 #ifdef HAVE_VULKAN
     Ptr<vkcom::Context> context;
     void initVkComBackend();

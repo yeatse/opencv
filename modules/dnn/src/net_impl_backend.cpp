@@ -172,8 +172,7 @@ void Net::Impl::initBackend(const std::vector<LayerPin>& blobsToKeep_)
     else if (preferableBackend == DNN_BACKEND_METAL)
     {
 #ifdef HAVE_METAL
-        // Metal backend initialization happens lazily during layer processing
-        CV_Assert(haveMetal());
+        initMetalBackend(blobsToKeep_);
 #else
         CV_Error(Error::StsNotImplemented, "This OpenCV version is built without support of Metal");
 #endif

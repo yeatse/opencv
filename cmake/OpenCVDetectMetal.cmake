@@ -16,8 +16,10 @@ if(APPLE)
             try_compile(VALID_METAL
                 "${OpenCV_BINARY_DIR}"
                 SOURCES "${OpenCV_SOURCE_DIR}/cmake/checks/metal.mm"
-                CMAKE_FLAGS
-                    "-DLINK_LIBRARIES:STRING=${FOUNDATION_FRAMEWORK};${METAL_FRAMEWORK};${MPSGRAPH_FRAMEWORK}"
+                LINK_LIBRARIES
+                    "${FOUNDATION_FRAMEWORK}"
+                    "${METAL_FRAMEWORK}"
+                    "${MPSGRAPH_FRAMEWORK}"
                 OUTPUT_VARIABLE TRY_OUT
             )
 
