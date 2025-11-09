@@ -250,6 +250,14 @@ void MetalNet::addBlobs(const std::vector<cv::Ptr<BackendWrapper>>& ptrs) {
     }
 }
 
+void* MetalNet::getDevice() const {
+    @autoreleasepool {
+        if (!impl) return nullptr;
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        return (__bridge void*)netImpl.device;
+    }
+}
+
 void MetalNet::reset() {
     if (impl) {
         @autoreleasepool {
@@ -377,7 +385,7 @@ MetalBackendNode::MetalBackendNode(void* tensor_) : BackendNode(DNN_BACKEND_META
 // MetalBackendWrapper implementation
 MetalBackendWrapper::MetalBackendWrapper(int targetId, Mat& m)
     : BackendWrapper(DNN_BACKEND_METAL, targetId), host(&m), metalBuffer(nullptr),
-      tensorData(nullptr), size(m.total() * m.elemSize())
+      tensorData(nullptr), metalDevice(nullptr), size(m.total() * m.elemSize())
 {
     // Get dimensions
     dimensions.resize(m.dims);
@@ -410,11 +418,21 @@ void MetalBackendWrapper::setHostDirty() {
     // Dirty tracking will be implemented in Phase 1
 }
 
+void MetalBackendWrapper::setDevice(void* device) {
+    metalDevice = device;
+}
+
 void MetalBackendWrapper::allocateMetalBuffer() {
     @autoreleasepool {
         if (!metalBuffer && size > 0) {
-            // Get Metal device from somewhere - for now, create default device
-            id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+            // Use shared device from MetalNet if available, otherwise create default
+            id<MTLDevice> device = nil;
+            if (metalDevice) {
+                device = (__bridge id<MTLDevice>)metalDevice;
+            } else {
+                device = MTLCreateSystemDefaultDevice();
+            }
+
             if (!device) {
                 CV_Error(Error::StsError, "Metal device not available");
             }
@@ -612,6 +630,17 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                     node->net = net;
                     inputNodes.emplace_back(Ptr<BackendNode>(node));
                 }
+
+                // Share device from network to input wrappers
+                void* sharedDevice = net->getDevice();
+                if (sharedDevice) {
+                    for (size_t i = 0; i < inpLd.outputBlobsWrappers.size(); ++i) {
+                        Ptr<MetalBackendWrapper> metalWrapper = inpLd.outputBlobsWrappers[i].dynamicCast<MetalBackendWrapper>();
+                        if (!metalWrapper.empty()) {
+                            metalWrapper->setDevice(sharedDevice);
+                        }
+                    }
+                }
             }
         }
 
@@ -663,6 +692,17 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
 
             // Add to Metal network's blob management
             net->addBlobs(ld.outputBlobsWrappers);
+
+            // Share device from network to all wrappers
+            void* sharedDevice = net->getDevice();
+            if (sharedDevice) {
+                for (auto& wrapper : ld.outputBlobsWrappers) {
+                    Ptr<MetalBackendWrapper> metalWrapper = wrapper.dynamicCast<MetalBackendWrapper>();
+                    if (!metalWrapper.empty()) {
+                        metalWrapper->setDevice(sharedDevice);
+                    }
+                }
+            }
         }
     }
 

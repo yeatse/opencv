@@ -56,6 +56,9 @@ public:
     void* getTensor(const std::string& name);
     void addTensor(const std::string& name, void* tensor);
 
+    // Device management
+    void* getDevice() const;  // Returns id<MTLDevice> as void*
+
     // Opaque pointer to Objective-C implementation (MPSGraphNetImpl)
     void* impl;
 
@@ -88,10 +91,15 @@ public:
     virtual void copyToHost() CV_OVERRIDE;
     virtual void setHostDirty() CV_OVERRIDE;
 
+    // Device management - share device from MetalNet
+    void setDevice(void* device);  // device is id<MTLDevice>
+    void* getDevice() const { return metalDevice; }
+
     std::string name;
     Mat* host;                  // CPU memory
     void* metalBuffer;          // id<MTLBuffer> (opaque)
     void* tensorData;           // MPSGraphTensorData* (opaque, internal)
+    void* metalDevice;          // id<MTLDevice> (opaque) - shared from MetalNet
     size_t size;
     std::vector<int32_t> dimensions;
 
