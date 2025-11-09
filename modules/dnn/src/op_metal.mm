@@ -698,6 +698,9 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                     }
                 }
             }
+
+            // Mark outputs for graph execution (like WebNN does)
+            addMetalOutputs(ld);
         }
     }
 
