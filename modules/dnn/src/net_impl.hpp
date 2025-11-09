@@ -11,6 +11,7 @@
 #include "op_vkcom.hpp"
 #include "op_cuda.hpp"
 #include "op_webnn.hpp"
+#include "op_metal.hpp"
 #include "op_timvx.hpp"
 #include "op_cann.hpp"
 
