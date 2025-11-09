@@ -1579,6 +1579,7 @@ string Net::Impl::dump(bool forceAllocation) const
     case DNN_BACKEND_WEBNN: backend = "WEBNN/"; break;
     case DNN_BACKEND_TIMVX: backend = "TIMVX/"; break;
     case DNN_BACKEND_CANN: backend = "CANN/"; break;
+    case DNN_BACKEND_METAL: backend = "METAL/"; break;
         // don't use default:
     }
     out << "digraph G {\n";
@@ -1989,6 +1990,7 @@ string Net::Impl::dumpToPbtxt(bool forceAllocation) const {
             case DNN_BACKEND_WEBNN:     backend = "WEBNN"; break;
             case DNN_BACKEND_TIMVX:     backend = "TIMVX"; break;
             case DNN_BACKEND_CANN:      backend = "CANN"; break;
+            case DNN_BACKEND_METAL:     backend = "METAL"; break;
         }
         return backend;
     };
