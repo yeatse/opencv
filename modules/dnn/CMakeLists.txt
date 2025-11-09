@@ -215,9 +215,11 @@ endif()
 set(metal_srcs "")
 if(APPLE AND HAVE_METAL)
   list(APPEND metal_srcs "${CMAKE_CURRENT_LIST_DIR}/src/op_metal.mm")
+  list(APPEND metal_srcs "${CMAKE_CURRENT_LIST_DIR}/src/net_impl_metal.mm")
   list(APPEND libs ${FOUNDATION_FRAMEWORK} ${METAL_FRAMEWORK} ${MPSGRAPH_FRAMEWORK})
   set_source_files_properties(
     "${CMAKE_CURRENT_LIST_DIR}/src/op_metal.mm"
+    "${CMAKE_CURRENT_LIST_DIR}/src/net_impl_metal.mm"
     PROPERTIES
       COMPILE_FLAGS "-std=c++11 -fobjc-arc"
   )
