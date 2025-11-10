@@ -166,17 +166,23 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
         // Prepare input feeds
         NSMutableDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = [NSMutableDictionary new];
 
-        // Feed input data
-        for (const auto& blobEntry : allBlobs) {
-            MetalBackendWrapper* wrapper = blobEntry.second.get();
+        // Feed input data - only feed placeholders (input tensors), not outputs
+        for (NSString* inputName in netImpl.inputNames) {
+            std::string inputNameStr = [inputName UTF8String];
+            auto it = allBlobs.find(inputNameStr);
+            if (it == allBlobs.end()) {
+                CV_LOG_WARNING(NULL, cv::format("Metal: Input '%s' not found in allBlobs", inputNameStr.c_str()));
+                continue;
+            }
+
+            MetalBackendWrapper* wrapper = it->second.get();
             if (!wrapper) continue;
 
             // Sync data to device
             wrapper->syncToDevice();
 
-            // Create MPSGraphTensorData from Metal buffer
-            NSString* blobName = [NSString stringWithUTF8String:blobEntry.first.c_str()];
-            MPSGraphTensor* tensor = netImpl.namedTensors[blobName];
+            // Get the placeholder tensor
+            MPSGraphTensor* tensor = netImpl.namedTensors[inputName];
 
             if (tensor && wrapper->metalBuffer) {
                 id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
@@ -206,6 +212,7 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
         }
 
         // Execute graph using runWithMTLCommandQueue (direct execution)
+        // Note: runWithMTLCommandQueue is synchronous and blocks until completion
         if (targetTensors.count > 0) {
             NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results =
                 [netImpl.graph runWithMTLCommandQueue:netImpl.commandQueue
@@ -223,20 +230,21 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
                 MPSGraphTensorData* resultData = results[outTensor];
 
                 if (resultData) {
-                    // Ensure output wrapper has Metal buffer
-                    if (!wrapper->metalBuffer) {
-                        wrapper->allocateMetalBuffer();
-                    }
-
-                    // Get the underlying MTLBuffer from MPSGraphTensorData
-                    id<MTLBuffer> outBuffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
-
-                    // Read data from MPSGraphTensorData using MPSNDArray's readBytes method
+                    // Get the data directly from MPSGraphTensorData's underlying buffer
                     MPSNDArray* resultArray = [resultData mpsndarray];
-                    [resultArray readBytes:outBuffer.contents strideBytes:nil];
 
-                    // Sync back to host
-                    wrapper->syncToHost();
+                    // Read data directly into host memory instead of going through Metal buffer
+                    if (wrapper->host && wrapper->host->data) {
+                        [resultArray readBytes:wrapper->host->data strideBytes:nil];
+                    } else {
+                        // Fallback: use Metal buffer as intermediate
+                        if (!wrapper->metalBuffer) {
+                            wrapper->allocateMetalBuffer();
+                        }
+                        id<MTLBuffer> outBuffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
+                        [resultArray readBytes:outBuffer.contents strideBytes:nil];
+                        wrapper->syncToHost();
+                    }
                 }
             }
         }
@@ -702,6 +710,9 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
 
             // Mark outputs for graph execution (like WebNN does)
             addMetalOutputs(ld);
+
+            // Enable Metal execution for this layer (clear skip flag)
+            ld.skip = false;
         }
     }
 
