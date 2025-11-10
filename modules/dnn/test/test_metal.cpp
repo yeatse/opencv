@@ -495,6 +495,213 @@ TEST(DNN_Metal, eltwise_add_three_inputs)
     }
 }
 
+TEST(DNN_Metal, eltwise_max)
+{
+    // Test element-wise maximum with Metal backend
+    Net netCPU, netMetal;
+
+    // Setup CPU network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_max";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "max");
+        int eltwise_id = netCPU.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netCPU.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netCPU.setInputsNames(inputNames);
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    }
+
+    // Setup Metal network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_max";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "max");
+        int eltwise_id = netMetal.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netMetal.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netMetal.setInputsNames(inputNames);
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
+
+    // Prepare test inputs (1x1x4x4)
+    int sizes[] = {1, 1, 4, 4};
+    Mat input1(4, sizes, CV_32F);
+    Mat input2(4, sizes, CV_32F);
+    float* data1 = input1.ptr<float>();
+    float* data2 = input2.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        data1[i] = (float)(i - 8);       // -8 to 7
+        data2[i] = (float)(8 - i);       // 8 to -7
+    }
+
+    // Test with CPU backend
+    netCPU.setInput(input1, "input1");
+    netCPU.setInput(input2, "input2");
+    Mat outputCPU = netCPU.forward();
+
+    // Test with Metal backend
+    netMetal.setInput(input1, "input1");
+    netMetal.setInput(input2, "input2");
+    Mat outputMetal = netMetal.forward();
+
+    // Results should match
+    normAssert(outputCPU, outputMetal, "Eltwise Max: Metal vs CPU");
+
+    // Verify max behavior: max(input1, input2)
+    float* outData = outputMetal.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        float expected = std::max(data1[i], data2[i]);
+        EXPECT_NEAR(expected, outData[i], 1e-5)
+            << "Eltwise Max mismatch at index " << i
+            << ": input1=" << data1[i]
+            << ", input2=" << data2[i]
+            << ", expected=" << expected
+            << ", got=" << outData[i];
+    }
+}
+
+TEST(DNN_Metal, eltwise_min)
+{
+    // Test element-wise minimum with Metal backend
+    Net netCPU, netMetal;
+
+    // Setup CPU network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_min";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "min");
+        int eltwise_id = netCPU.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netCPU.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netCPU.setInputsNames(inputNames);
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    }
+
+    // Setup Metal network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_min";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "min");
+        int eltwise_id = netMetal.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netMetal.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netMetal.setInputsNames(inputNames);
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
+
+    // Prepare test inputs (1x1x4x4)
+    int sizes[] = {1, 1, 4, 4};
+    Mat input1(4, sizes, CV_32F);
+    Mat input2(4, sizes, CV_32F);
+    float* data1 = input1.ptr<float>();
+    float* data2 = input2.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        data1[i] = (float)(i - 8);       // -8 to 7
+        data2[i] = (float)(8 - i);       // 8 to -7
+    }
+
+    // Test with CPU backend
+    netCPU.setInput(input1, "input1");
+    netCPU.setInput(input2, "input2");
+    Mat outputCPU = netCPU.forward();
+
+    // Test with Metal backend
+    netMetal.setInput(input1, "input1");
+    netMetal.setInput(input2, "input2");
+    Mat outputMetal = netMetal.forward();
+
+    // Results should match
+    normAssert(outputCPU, outputMetal, "Eltwise Min: Metal vs CPU");
+
+    // Verify min behavior: min(input1, input2)
+    float* outData = outputMetal.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        float expected = std::min(data1[i], data2[i]);
+        EXPECT_NEAR(expected, outData[i], 1e-5)
+            << "Eltwise Min mismatch at index " << i
+            << ": input1=" << data1[i]
+            << ", input2=" << data2[i]
+            << ", expected=" << expected
+            << ", got=" << outData[i];
+    }
+}
+
+TEST(DNN_Metal, eltwise_div)
+{
+    // Test element-wise division with Metal backend
+    Net netCPU, netMetal;
+
+    // Setup CPU network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_div";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "div");
+        int eltwise_id = netCPU.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netCPU.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netCPU.setInputsNames(inputNames);
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    }
+
+    // Setup Metal network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_div";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "div");
+        int eltwise_id = netMetal.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netMetal.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netMetal.setInputsNames(inputNames);
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
+
+    // Prepare test inputs (1x1x4x4)
+    int sizes[] = {1, 1, 4, 4};
+    Mat input1(4, sizes, CV_32F);
+    Mat input2(4, sizes, CV_32F);
+    float* data1 = input1.ptr<float>();
+    float* data2 = input2.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        data1[i] = (float)(i + 1);       // 1 to 16 (avoid division by zero)
+        data2[i] = (float)(2);           // All 2s for simple division
+    }
+
+    // Test with CPU backend
+    netCPU.setInput(input1, "input1");
+    netCPU.setInput(input2, "input2");
+    Mat outputCPU = netCPU.forward();
+
+    // Test with Metal backend
+    netMetal.setInput(input1, "input1");
+    netMetal.setInput(input2, "input2");
+    Mat outputMetal = netMetal.forward();
+
+    // Results should match
+    normAssert(outputCPU, outputMetal, "Eltwise Div: Metal vs CPU");
+
+    // Verify division behavior: input1 / input2
+    float* outData = outputMetal.ptr<float>();
+    for (int i = 0; i < 16; i++) {
+        float expected = data1[i] / data2[i];
+        EXPECT_NEAR(expected, outData[i], 1e-5)
+            << "Eltwise Div mismatch at index " << i
+            << ": input1=" << data1[i]
+            << ", input2=" << data2[i]
+            << ", expected=" << expected
+            << ", got=" << outData[i];
+    }
+}
+
 #else  // !HAVE_METAL
 
 TEST(DNN_Metal, backend_not_available)

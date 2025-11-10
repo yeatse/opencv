@@ -187,11 +187,9 @@ public:
 #ifdef HAVE_METAL
         if (backendId == DNN_BACKEND_METAL)
         {
-            // Support SUM (addition) and PROD (multiplication) operations
+            // Support all element-wise operations: SUM, PROD, MAX, MIN, DIV
             // Only support simple cases without coefficients and with same channel mode
-            return (op == SUM || op == PROD) &&
-                   channelsMode == ELTWISE_CHANNNELS_SAME &&
-                   coeffs.empty();
+            return channelsMode == ELTWISE_CHANNNELS_SAME && coeffs.empty();
         }
 #endif
 
@@ -764,7 +762,6 @@ public:
                                         const std::vector<Ptr<BackendNode>>& nodes) CV_OVERRIDE
     {
         CV_Assert(nodes.size() >= 2);
-        CV_Assert(op == SUM || op == PROD);
         CV_Assert(coeffs.empty());
         CV_Assert(channelsMode == ELTWISE_CHANNNELS_SAME);
 
@@ -785,13 +782,25 @@ public:
 
             std::string opName = name + "_op_" + std::to_string(i);
 
-            if (op == SUM)
+            switch (op)
             {
-                resultTensor = builder.Add(resultTensor, inputNode->tensor, opName);
-            }
-            else if (op == PROD)
-            {
-                resultTensor = builder.Mul(resultTensor, inputNode->tensor, opName);
+                case SUM:
+                    resultTensor = builder.Add(resultTensor, inputNode->tensor, opName);
+                    break;
+                case PROD:
+                    resultTensor = builder.Mul(resultTensor, inputNode->tensor, opName);
+                    break;
+                case MAX:
+                    resultTensor = builder.Max(resultTensor, inputNode->tensor, opName);
+                    break;
+                case MIN:
+                    resultTensor = builder.Min(resultTensor, inputNode->tensor, opName);
+                    break;
+                case DIV:
+                    resultTensor = builder.Div(resultTensor, inputNode->tensor, opName);
+                    break;
+                default:
+                    CV_Error(Error::StsNotImplemented, "Unsupported eltwise operation for Metal backend");
             }
         }
 

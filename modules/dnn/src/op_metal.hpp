@@ -37,6 +37,9 @@ public:
     void* Relu(void* inputTensor, const std::string& name);
     void* Add(void* tensor1, void* tensor2, const std::string& name);
     void* Mul(void* tensor1, void* tensor2, const std::string& name);
+    void* Max(void* tensor1, void* tensor2, const std::string& name);
+    void* Min(void* tensor1, void* tensor2, const std::string& name);
+    void* Div(void* tensor1, void* tensor2, const std::string& name);
     void* Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
                  const std::vector<int>& strides, const std::vector<int>& paddings,
                  const std::vector<int>& dilations, int groups, const std::string& name);

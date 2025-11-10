@@ -139,6 +139,60 @@ void* MetalGraphBuilder::Mul(void* tensor1, void* tensor2, const std::string& na
     }
 }
 
+void* MetalGraphBuilder::Max(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph maximumWithPrimaryTensor:t1
+                                                         secondaryTensor:t2
+                                                                    name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalGraphBuilder::Min(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph minimumWithPrimaryTensor:t1
+                                                         secondaryTensor:t2
+                                                                    name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalGraphBuilder::Div(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph divisionWithPrimaryTensor:t1
+                                                          secondaryTensor:t2
+                                                                     name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
 void* MetalGraphBuilder::Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
                                   const std::vector<int>& strides, const std::vector<int>& paddings,
                                   const std::vector<int>& dilations, int groups, const std::string& name) {
