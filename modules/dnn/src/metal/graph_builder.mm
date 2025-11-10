@@ -20,6 +20,8 @@
 
 namespace cv { namespace dnn {
 
+namespace metal {
+
 // Helper function to convert OpenCV Mat type to MPSDataType
 static MPSDataType getMPSDataType(int matType) {
     switch (CV_MAT_DEPTH(matType)) {
@@ -254,6 +256,8 @@ MPSGraphTensorPtr MetalGraphBuilder::Constant(const cv::Mat& data, const std::st
         return (__bridge void*)tensor;
     }
 }
+
+}  // namespace metal
 
 }}  // namespace cv::dnn
 

@@ -50,8 +50,8 @@ public:
 
     void forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers, bool isAsync);
 
-    std::vector<MPSGraphTensorPtr> setInputs(const std::vector<cv::Mat>& inputs,
-                                             const std::vector<std::string>& names);
+    std::vector<metal::MPSGraphTensorPtr> setInputs(const std::vector<cv::Mat>& inputs,
+                                                     const std::vector<std::string>& names);
 
     void addBlobs(const std::vector<cv::Ptr<BackendWrapper>>& ptrs);
 
@@ -59,13 +59,13 @@ public:
 
     // Graph builder for creating operations (similar to WebNN's ml::GraphBuilder)
     // Access via getBuilder() to ensure it's initialized
-    MetalGraphBuilder& getBuilder();
+    metal::MetalGraphBuilder& getBuilder();
 
     // Device management
     MTLDevicePtr getDevice() const;
 
     // Opaque pointer to Objective-C implementation (MPSGraphNetImpl)
-    MPSGraphNetImplPtr impl;
+    metal::MPSGraphNetImplPtr impl;
 
     // Metal resources (managed by impl)
     std::unordered_map<std::string, cv::Ptr<MetalBackendWrapper>> allBlobs;
@@ -77,16 +77,16 @@ public:
     std::vector<std::string> outputNames;
 
 private:
-    MetalGraphBuilder* builderPtr;  // Pointer to builder, initialized when impl is created
+    metal::MetalGraphBuilder* builderPtr;  // Pointer to builder, initialized when impl is created
 };
 
 class MetalBackendNode : public BackendNode
 {
 public:
-    MetalBackendNode(MPSGraphTensorPtr tensor);
+    MetalBackendNode(metal::MPSGraphTensorPtr tensor);
 
     std::string name;
-    MPSGraphTensorPtr tensor;
+    metal::MPSGraphTensorPtr tensor;
     Ptr<MetalNet> net;      // Reference to parent graph
 };
 

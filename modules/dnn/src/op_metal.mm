@@ -108,14 +108,14 @@ void MetalNet::init(Target targetId) {
 
             // Initialize the graph builder
             if (!builderPtr) {
-                builderPtr = new MetalGraphBuilder(impl);
+                builderPtr = new metal::MetalGraphBuilder(impl);
             }
         }
         isInit = true;
     }
 }
 
-MetalGraphBuilder& MetalNet::getBuilder() {
+metal::MetalGraphBuilder& MetalNet::getBuilder() {
     if (!builderPtr) {
         CV_Error(Error::StsError, "Metal graph builder not initialized. Call init() first.");
     }
@@ -148,8 +148,8 @@ bool MetalNet::isInitialized() {
     return isInit;
 }
 
-std::vector<MPSGraphTensorPtr> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
-                                        const std::vector<std::string>& names) {
+std::vector<metal::MPSGraphTensorPtr> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
+                                                           const std::vector<std::string>& names) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl) {
@@ -339,7 +339,7 @@ void MetalNet::reset() {
 }
 
 // MetalBackendNode implementation
-MetalBackendNode::MetalBackendNode(MPSGraphTensorPtr tensor_) : BackendNode(DNN_BACKEND_METAL) {
+MetalBackendNode::MetalBackendNode(metal::MPSGraphTensorPtr tensor_) : BackendNode(DNN_BACKEND_METAL) {
     tensor = tensor_;
 }
 

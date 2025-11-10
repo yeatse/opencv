@@ -14,6 +14,8 @@ namespace cv { namespace dnn {
 
 #ifdef HAVE_METAL
 
+namespace metal {
+
 // Opaque pointer types for Metal/MPSGraph objects
 // These hide Objective-C types from C++ headers
 typedef void* MPSGraphNetImplPtr;    // Opaque pointer to MPSGraphNetImpl*
@@ -47,6 +49,8 @@ public:
 private:
     MPSGraphNetImplPtr impl;
 };
+
+}  // namespace metal
 
 #endif  // HAVE_METAL
 
