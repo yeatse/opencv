@@ -240,7 +240,7 @@ TEST(DNN_Metal, relu_layer)
     lp.name = "testReLU";
 
     Net net;
-    int id = net.addLayerToPrev(lp.name, lp.type, lp);
+    (void)net.addLayerToPrev(lp.name, lp.type, lp);
 
     // Create input with both positive and negative values
     int sizes[] = {1, 1, 4, 4};
@@ -312,20 +312,17 @@ TEST(DNN_Metal, eltwise_add)
         data2[i] = (float)(i * 2);    // 0 to 30
     }
 
-    std::vector<String> inputNames = {"input1", "input2"};
-    std::vector<Mat> inputs = {input1, input2};
-
     // Test with CPU backend
     net.setPreferableBackend(DNN_BACKEND_OPENCV);
-    net.setInputsNames(inputNames);
-    net.setInputs(inputs);
+    net.setInput(input1, "input1");
+    net.setInput(input2, "input2");
     Mat outputCPU = net.forward();
 
     // Test with Metal backend
     net.setPreferableBackend(DNN_BACKEND_METAL);
     net.setPreferableTarget(DNN_TARGET_CPU);
-    net.setInputsNames(inputNames);
-    net.setInputs(inputs);
+    net.setInput(input1, "input1");
+    net.setInput(input2, "input2");
     Mat outputMetal = net.forward();
 
     // Results should match
@@ -379,20 +376,17 @@ TEST(DNN_Metal, eltwise_multiply)
         data2[i] = (float)(2);        // All 2s for simple test
     }
 
-    std::vector<String> inputNames = {"input1", "input2"};
-    std::vector<Mat> inputs = {input1, input2};
-
     // Test with CPU backend
     net.setPreferableBackend(DNN_BACKEND_OPENCV);
-    net.setInputsNames(inputNames);
-    net.setInputs(inputs);
+    net.setInput(input1, "input1");
+    net.setInput(input2, "input2");
     Mat outputCPU = net.forward();
 
     // Test with Metal backend
     net.setPreferableBackend(DNN_BACKEND_METAL);
     net.setPreferableTarget(DNN_TARGET_CPU);
-    net.setInputsNames(inputNames);
-    net.setInputs(inputs);
+    net.setInput(input1, "input1");
+    net.setInput(input2, "input2");
     Mat outputMetal = net.forward();
 
     // Results should match
@@ -455,20 +449,19 @@ TEST(DNN_Metal, eltwise_add_three_inputs)
         data3[i] = (float)(i + 20);
     }
 
-    std::vector<String> inputNames = {"input1", "input2", "input3"};
-    std::vector<Mat> inputs = {input1, input2, input3};
-
     // Test with CPU backend
     net.setPreferableBackend(DNN_BACKEND_OPENCV);
-    net.setInputsNames(inputNames);
-    net.setInputs(inputs);
+    net.setInput(input1, "input1");
+    net.setInput(input2, "input2");
+    net.setInput(input3, "input3");
     Mat outputCPU = net.forward();
 
     // Test with Metal backend
     net.setPreferableBackend(DNN_BACKEND_METAL);
     net.setPreferableTarget(DNN_TARGET_CPU);
-    net.setInputsNames(inputNames);
-    net.setInputs(inputs);
+    net.setInput(input1, "input1");
+    net.setInput(input2, "input2");
+    net.setInput(input3, "input3");
     Mat outputMetal = net.forward();
 
     // Results should match
