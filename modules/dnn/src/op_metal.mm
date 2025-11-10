@@ -60,6 +60,29 @@
 // C++ implementation
 namespace cv { namespace dnn {
 
+// Helper function to convert OpenCV Mat type to MPSDataType
+static MPSDataType getMPSDataType(int matType) {
+    switch (CV_MAT_DEPTH(matType)) {
+        case CV_32F:
+            return MPSDataTypeFloat32;
+        case CV_16F:
+            return MPSDataTypeFloat16;
+        case CV_8U:
+            return MPSDataTypeUInt8;
+        case CV_8S:
+            return MPSDataTypeInt8;
+        case CV_16S:
+            return MPSDataTypeInt16;
+        case CV_32S:
+            return MPSDataTypeInt32;
+        default:
+            CV_Error(Error::StsNotImplemented,
+                     cv::format("Unsupported Mat type for Metal backend: %s",
+                               typeToString(matType).c_str()));
+            return MPSDataTypeFloat32; // Unreachable, but keeps compiler happy
+    }
+}
+
 // MetalNet implementation
 MetalNet::MetalNet() : impl(nullptr), hasNetOwner(false), isInit(false) {
 }
@@ -139,9 +162,12 @@ std::vector<void*> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
                 [shape addObject:@(mat.size[d])];
             }
 
+            // Derive MPSDataType from Mat type instead of hard-coding float32
+            MPSDataType dataType = getMPSDataType(mat.type());
+
             // Create placeholder tensor
             MPSGraphTensor* tensor = [netImpl.graph placeholderWithShape:shape
-                                                                dataType:MPSDataTypeFloat32
+                                                                dataType:dataType
                                                                     name:[NSString stringWithUTF8String:name.c_str()]];
 
             // Store in named tensors dictionary
@@ -186,7 +212,7 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
             // Get the placeholder tensor
             MPSGraphTensor* tensor = netImpl.namedTensors[inputName];
 
-            if (tensor && wrapper->metalBuffer) {
+            if (tensor && wrapper->metalBuffer && wrapper->host) {
                 id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
 
                 // Convert dimensions to shape
@@ -195,10 +221,13 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
                     [shape addObject:@(dim)];
                 }
 
+                // Derive MPSDataType from wrapper's host Mat type
+                MPSDataType dataType = getMPSDataType(wrapper->host->type());
+
                 MPSGraphTensorData* tensorData = [[MPSGraphTensorData alloc]
                     initWithMTLBuffer:buffer
                                 shape:shape
-                             dataType:MPSDataTypeFloat32];
+                             dataType:dataType];
 
                 feeds[tensor] = tensorData;
             }
@@ -243,6 +272,8 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
 
                     // Read data directly into host memory instead of going through Metal buffer
                     if (metalWrapper->host && metalWrapper->host->data) {
+                        // Validate that host memory is contiguous to prevent corruption
+                        CV_Assert(metalWrapper->host->isContinuous());
                         [resultArray readBytes:metalWrapper->host->data strideBytes:nil];
                     } else {
                         // Fallback: use Metal buffer as intermediate
@@ -471,6 +502,9 @@ void MetalBackendWrapper::syncToDevice() {
     @autoreleasepool {
         if (!host || !host->data) return;
 
+        // Validate that host memory is contiguous to prevent corruption
+        CV_Assert(host->isContinuous());
+
         // Allocate Metal buffer if needed
         if (!metalBuffer) {
             allocateMetalBuffer();
@@ -487,6 +521,9 @@ void MetalBackendWrapper::syncToDevice() {
 void MetalBackendWrapper::syncToHost() {
     @autoreleasepool {
         if (!host || !metalBuffer) return;
+
+        // Validate that host memory is contiguous to prevent corruption
+        CV_Assert(host->isContinuous());
 
         // Copy data from Metal buffer to host Mat
         id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)metalBuffer;
