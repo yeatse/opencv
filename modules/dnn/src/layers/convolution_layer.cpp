@@ -1045,13 +1045,11 @@ public:
         CV_Assert(weights.dims == 4);  // Expecting 4D weights [O, I, H, W]
 
         // Calculate groups
-        int inpCn = weights.size[1];
         int outCn = weights.size[0];
         int groups = 1;
         if (blobs[0].size.p) {
             // Get actual number of groups from layer params
-            // For grouped convolution: inpCn per group, total groups = total_inpCn / inpCn
-            // This is typically set during finalize
+            // For grouped convolution, groups = outCn / numOutput
             // For standard conv, groups = 1
             groups = outCn / numOutput;
             if (groups == 0) groups = 1;
@@ -1114,9 +1112,9 @@ public:
         }
 
         // Prepare convolution parameters
-        std::vector<int> stridesVec = {strides[0], strides[1]};
+        std::vector<int> stridesVec = {static_cast<int>(strides[0]), static_cast<int>(strides[1])};
         std::vector<int> paddingsVec = {static_cast<int>(pads_begin[0]), static_cast<int>(pads_begin[1])};
-        std::vector<int> dilationsVec = {dilations[0], dilations[1]};
+        std::vector<int> dilationsVec = {static_cast<int>(dilations[0]), static_cast<int>(dilations[1])};
 
         // Build convolution operation
         void* outputTensor = builder.Conv2d(inputTensor, weightsTensor, biasTensor,
