@@ -229,7 +229,7 @@ public:
         Ptr<MetalNet> net = inputNode->net;
 
         // Add ReLU operation to the graph
-        metal::MPSGraphTensorPtr outputTensor = func.initMetalAPI(net, inputNode->tensor, Layer::name);
+        auto outputTensor = func.initMetalAPI(net, inputNode->tensor, Layer::name);
 
         // Create output node
         Ptr<MetalBackendNode> outputNode = Ptr<MetalBackendNode>(new MetalBackendNode(outputTensor));
