@@ -116,18 +116,22 @@ std::vector<void*> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
             CV_Error(Error::StsError, "Metal network not initialized");
         }
 
+        // Ensure inputs and names match to catch wiring bugs
+        CV_Assert(inputs.size() == names.size());
+
         std::vector<void*> result;
 
-        // Store input names
+        // Clear input names (both C++ and Objective-C arrays)
         inputNames.clear();
-        for (const auto& name : names) {
-            inputNames.push_back(name);
-        }
+        [netImpl.inputNames removeAllObjects];
 
         // Create placeholder tensors for inputs
-        for (size_t i = 0; i < inputs.size() && i < names.size(); i++) {
+        for (size_t i = 0; i < inputs.size(); i++) {
             const cv::Mat& mat = inputs[i];
             const std::string& name = names[i];
+
+            // Store input names
+            inputNames.push_back(name);
 
             // Convert Mat dimensions to NSArray
             NSMutableArray<NSNumber*>* shape = [NSMutableArray new];
@@ -219,29 +223,35 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
                            targetOperations:nil];
 
             // Copy results back to output wrappers
-            for (size_t i = 0; i < outBlobsWrappers.size() && i < netImpl.outputNames.count; i++) {
-                Ptr<MetalBackendWrapper> wrapper = outBlobsWrappers[i].dynamicCast<MetalBackendWrapper>();
-                if (wrapper.empty()) continue;
+            // Look up each wrapper's tensor by name instead of using global index
+            for (const auto& wrapper : outBlobsWrappers) {
+                Ptr<MetalBackendWrapper> metalWrapper = wrapper.dynamicCast<MetalBackendWrapper>();
+                if (metalWrapper.empty()) continue;
 
-                NSString* outName = netImpl.outputNames[i];
+                // Look up tensor by wrapper's name (not global index)
+                NSString* outName = [NSString stringWithUTF8String:metalWrapper->name.c_str()];
                 MPSGraphTensor* outTensor = netImpl.namedTensors[outName];
-                MPSGraphTensorData* resultData = results[outTensor];
+                if (!outTensor) {
+                    CV_LOG_WARNING(NULL, cv::format("Metal: Output tensor '%s' not found", metalWrapper->name.c_str()));
+                    continue;
+                }
 
+                MPSGraphTensorData* resultData = results[outTensor];
                 if (resultData) {
                     // Get the data directly from MPSGraphTensorData's underlying buffer
                     MPSNDArray* resultArray = [resultData mpsndarray];
 
                     // Read data directly into host memory instead of going through Metal buffer
-                    if (wrapper->host && wrapper->host->data) {
-                        [resultArray readBytes:wrapper->host->data strideBytes:nil];
+                    if (metalWrapper->host && metalWrapper->host->data) {
+                        [resultArray readBytes:metalWrapper->host->data strideBytes:nil];
                     } else {
                         // Fallback: use Metal buffer as intermediate
-                        if (!wrapper->metalBuffer) {
-                            wrapper->allocateMetalBuffer();
+                        if (!metalWrapper->metalBuffer) {
+                            metalWrapper->allocateMetalBuffer();
                         }
-                        id<MTLBuffer> outBuffer = (__bridge id<MTLBuffer>)wrapper->metalBuffer;
+                        id<MTLBuffer> outBuffer = (__bridge id<MTLBuffer>)metalWrapper->metalBuffer;
                         [resultArray readBytes:outBuffer.contents strideBytes:nil];
-                        wrapper->syncToHost();
+                        metalWrapper->syncToHost();
                     }
                 }
             }
