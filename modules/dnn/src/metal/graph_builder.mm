@@ -208,7 +208,7 @@ MPSGraphTensorPtr MetalGraphBuilder::GetTensor(const std::string& name) {
     }
 }
 
-void MetalGraphBuilder::AddTensor(const std::stringAddTensor(const std::string& name, void* tensor) name, MPSGraphTensorPtr tensor) {
+void MetalGraphBuilder::AddTensor(const std::string& name, MPSGraphTensorPtr tensor) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor) return;
