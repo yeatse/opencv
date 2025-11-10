@@ -591,7 +591,8 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                 Ptr<MetalBackendWrapper> wrapper = ld.outputBlobsWrappers[i].dynamicCast<MetalBackendWrapper>();
                 if (wrapper.empty()) continue;
                 std::string outputName = netInputLayer->outNames.empty() ? ld.name : netInputLayer->outNames[i];
-                outputName = ld.outputBlobsWrappers.size() > 1 ? (outputName + "." + std::to_string(i)) : outputName;
+                // Only append index suffix if we don't have named inputs
+                outputName = (netInputLayer->outNames.empty() && ld.outputBlobsWrappers.size() > 1) ? (outputName + "." + std::to_string(i)) : outputName;
                 wrapper->name = outputName;
             }
         }
@@ -708,6 +709,9 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                         }
                     }
                 }
+
+                // Register input wrappers in allBlobs so they can be found during forward pass
+                net->addBlobs(inpLd.outputBlobsWrappers);
             }
         }
 

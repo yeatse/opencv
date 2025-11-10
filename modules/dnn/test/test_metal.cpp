@@ -280,35 +280,40 @@ TEST(DNN_Metal, relu_layer)
 TEST(DNN_Metal, eltwise_add)
 {
     // Test element-wise addition with Metal backend
-    Net net;
+    // Create two separate networks - one for CPU, one for Metal
+    Net netCPU, netMetal;
 
-    // Create two input layers
-    LayerParams input1Params;
-    input1Params.name = "input1";
-    input1Params.type = "Input";
-    net.addLayer(input1Params.name, input1Params.type, input1Params);
+    // Setup CPU network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_add";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "sum");
+        int eltwise_id = netCPU.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netCPU.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netCPU.setInputsNames(inputNames);
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    }
 
-    LayerParams input2Params;
-    input2Params.name = "input2";
-    input2Params.type = "Input";
-    net.addLayer(input2Params.name, input2Params.type, input2Params);
+    // Setup Metal network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_add";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "sum");
+        int eltwise_id = netMetal.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netMetal.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netMetal.setInputsNames(inputNames);
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
 
-    // Create element-wise addition layer
-    LayerParams eltwiseParams;
-    eltwiseParams.name = "eltwise_add";
-    eltwiseParams.type = "Eltwise";
-    eltwiseParams.set("operation", "sum");
-    int eltwise_id = net.addLayer(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
-    net.connect(0, 0, eltwise_id, 0);  // Connect input1 to eltwise
-    net.connect(1, 0, eltwise_id, 1);  // Connect input2 to eltwise
-
-    // Register input names with the network
-    std::vector<String> inputNames = {"input1", "input2"};
-    net.setInputsNames(inputNames);
-
-    // Prepare test inputs (1x1x4x4)
-    Mat input1(4, 4, CV_32F);
-    Mat input2(4, 4, CV_32F);
+    // Prepare test inputs (1x1x4x4) - must be 4D tensors
+    int sizes[] = {1, 1, 4, 4};
+    Mat input1(4, sizes, CV_32F);
+    Mat input2(4, sizes, CV_32F);
     float* data1 = input1.ptr<float>();
     float* data2 = input2.ptr<float>();
     for (int i = 0; i < 16; i++) {
@@ -317,17 +322,14 @@ TEST(DNN_Metal, eltwise_add)
     }
 
     // Test with CPU backend
-    net.setPreferableBackend(DNN_BACKEND_OPENCV);
-    net.setInput(input1, "input1");
-    net.setInput(input2, "input2");
-    Mat outputCPU = net.forward();
+    netCPU.setInput(input1, "input1");
+    netCPU.setInput(input2, "input2");
+    Mat outputCPU = netCPU.forward();
 
     // Test with Metal backend
-    net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
-    net.setInput(input1, "input1");
-    net.setInput(input2, "input2");
-    Mat outputMetal = net.forward();
+    netMetal.setInput(input1, "input1");
+    netMetal.setInput(input2, "input2");
+    Mat outputMetal = netMetal.forward();
 
     // Results should match
     normAssert(outputCPU, outputMetal, "Eltwise Add: Metal vs CPU");
@@ -348,35 +350,40 @@ TEST(DNN_Metal, eltwise_add)
 TEST(DNN_Metal, eltwise_multiply)
 {
     // Test element-wise multiplication with Metal backend
-    Net net;
+    // Create two separate networks - one for CPU, one for Metal
+    Net netCPU, netMetal;
 
-    // Create two input layers
-    LayerParams input1Params;
-    input1Params.name = "input1";
-    input1Params.type = "Input";
-    net.addLayer(input1Params.name, input1Params.type, input1Params);
+    // Setup CPU network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_mul";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "mul");
+        int eltwise_id = netCPU.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netCPU.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netCPU.setInputsNames(inputNames);
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    }
 
-    LayerParams input2Params;
-    input2Params.name = "input2";
-    input2Params.type = "Input";
-    net.addLayer(input2Params.name, input2Params.type, input2Params);
+    // Setup Metal network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_mul";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "mul");
+        int eltwise_id = netMetal.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netMetal.connect(0, 1, eltwise_id, 1);
+        std::vector<String> inputNames = {"input1", "input2"};
+        netMetal.setInputsNames(inputNames);
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
 
-    // Create element-wise multiplication layer
-    LayerParams eltwiseParams;
-    eltwiseParams.name = "eltwise_mul";
-    eltwiseParams.type = "Eltwise";
-    eltwiseParams.set("operation", "mul");
-    int eltwise_id = net.addLayer(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
-    net.connect(0, 0, eltwise_id, 0);  // Connect input1 to eltwise
-    net.connect(1, 0, eltwise_id, 1);  // Connect input2 to eltwise
-
-    // Register input names with the network
-    std::vector<String> inputNames = {"input1", "input2"};
-    net.setInputsNames(inputNames);
-
-    // Prepare test inputs (1x1x4x4)
-    Mat input1(4, 4, CV_32F);
-    Mat input2(4, 4, CV_32F);
+    // Prepare test inputs (1x1x4x4) - must be 4D tensors
+    int sizes[] = {1, 1, 4, 4};
+    Mat input1(4, sizes, CV_32F);
+    Mat input2(4, sizes, CV_32F);
     float* data1 = input1.ptr<float>();
     float* data2 = input2.ptr<float>();
     for (int i = 0; i < 16; i++) {
@@ -385,17 +392,14 @@ TEST(DNN_Metal, eltwise_multiply)
     }
 
     // Test with CPU backend
-    net.setPreferableBackend(DNN_BACKEND_OPENCV);
-    net.setInput(input1, "input1");
-    net.setInput(input2, "input2");
-    Mat outputCPU = net.forward();
+    netCPU.setInput(input1, "input1");
+    netCPU.setInput(input2, "input2");
+    Mat outputCPU = netCPU.forward();
 
     // Test with Metal backend
-    net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
-    net.setInput(input1, "input1");
-    net.setInput(input2, "input2");
-    Mat outputMetal = net.forward();
+    netMetal.setInput(input1, "input1");
+    netMetal.setInput(input2, "input2");
+    Mat outputMetal = netMetal.forward();
 
     // Results should match
     normAssert(outputCPU, outputMetal, "Eltwise Multiply: Metal vs CPU");
@@ -416,42 +420,43 @@ TEST(DNN_Metal, eltwise_multiply)
 TEST(DNN_Metal, eltwise_add_three_inputs)
 {
     // Test element-wise addition with three inputs to verify chaining
-    Net net;
+    // Create two separate networks - one for CPU, one for Metal
+    Net netCPU, netMetal;
 
-    // Create three input layers
-    LayerParams input1Params;
-    input1Params.name = "input1";
-    input1Params.type = "Input";
-    net.addLayer(input1Params.name, input1Params.type, input1Params);
+    // Setup CPU network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_add3";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "sum");
+        int eltwise_id = netCPU.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netCPU.connect(0, 1, eltwise_id, 1);
+        netCPU.connect(0, 2, eltwise_id, 2);
+        std::vector<String> inputNames = {"input1", "input2", "input3"};
+        netCPU.setInputsNames(inputNames);
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    }
 
-    LayerParams input2Params;
-    input2Params.name = "input2";
-    input2Params.type = "Input";
-    net.addLayer(input2Params.name, input2Params.type, input2Params);
+    // Setup Metal network
+    {
+        LayerParams eltwiseParams;
+        eltwiseParams.name = "eltwise_add3";
+        eltwiseParams.type = "Eltwise";
+        eltwiseParams.set("operation", "sum");
+        int eltwise_id = netMetal.addLayerToPrev(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
+        netMetal.connect(0, 1, eltwise_id, 1);
+        netMetal.connect(0, 2, eltwise_id, 2);
+        std::vector<String> inputNames = {"input1", "input2", "input3"};
+        netMetal.setInputsNames(inputNames);
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
 
-    LayerParams input3Params;
-    input3Params.name = "input3";
-    input3Params.type = "Input";
-    net.addLayer(input3Params.name, input3Params.type, input3Params);
-
-    // Create element-wise addition layer with three inputs
-    LayerParams eltwiseParams;
-    eltwiseParams.name = "eltwise_add3";
-    eltwiseParams.type = "Eltwise";
-    eltwiseParams.set("operation", "sum");
-    int eltwise_id = net.addLayer(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
-    net.connect(0, 0, eltwise_id, 0);  // Connect input1 to eltwise
-    net.connect(1, 0, eltwise_id, 1);  // Connect input2 to eltwise
-    net.connect(2, 0, eltwise_id, 2);  // Connect input3 to eltwise
-
-    // Register input names with the network
-    std::vector<String> inputNames = {"input1", "input2", "input3"};
-    net.setInputsNames(inputNames);
-
-    // Prepare test inputs (1x1x4x4)
-    Mat input1(4, 4, CV_32F);
-    Mat input2(4, 4, CV_32F);
-    Mat input3(4, 4, CV_32F);
+    // Prepare test inputs (1x1x4x4) - must be 4D tensors
+    int sizes[] = {1, 1, 4, 4};
+    Mat input1(4, sizes, CV_32F);
+    Mat input2(4, sizes, CV_32F);
+    Mat input3(4, sizes, CV_32F);
     float* data1 = input1.ptr<float>();
     float* data2 = input2.ptr<float>();
     float* data3 = input3.ptr<float>();
@@ -462,19 +467,16 @@ TEST(DNN_Metal, eltwise_add_three_inputs)
     }
 
     // Test with CPU backend
-    net.setPreferableBackend(DNN_BACKEND_OPENCV);
-    net.setInput(input1, "input1");
-    net.setInput(input2, "input2");
-    net.setInput(input3, "input3");
-    Mat outputCPU = net.forward();
+    netCPU.setInput(input1, "input1");
+    netCPU.setInput(input2, "input2");
+    netCPU.setInput(input3, "input3");
+    Mat outputCPU = netCPU.forward();
 
     // Test with Metal backend
-    net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
-    net.setInput(input1, "input1");
-    net.setInput(input2, "input2");
-    net.setInput(input3, "input3");
-    Mat outputMetal = net.forward();
+    netMetal.setInput(input1, "input1");
+    netMetal.setInput(input2, "input2");
+    netMetal.setInput(input3, "input3");
+    Mat outputMetal = netMetal.forward();
 
     // Results should match
     normAssert(outputCPU, outputMetal, "Eltwise Add 3 Inputs: Metal vs CPU");

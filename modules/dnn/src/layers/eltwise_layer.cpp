@@ -799,6 +799,9 @@ public:
         outputNode->net = net;
         outputNode->name = name;
 
+        // Register the final output tensor with the layer's name so it can be found during forward pass
+        net->addTensor(name, resultTensor);
+
         return outputNode;
     }
 #endif
