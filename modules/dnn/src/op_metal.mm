@@ -148,7 +148,7 @@ bool MetalNet::isInitialized() {
     return isInit;
 }
 
-std::vector<void*> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
+std::vector<MPSGraphTensorPtr> MetalNet::setInputs(const std::vector<cv::Mat>& inputs,
                                         const std::vector<std::string>& names) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
@@ -316,7 +316,7 @@ void MetalNet::addBlobs(const std::vector<cv::Ptr<BackendWrapper>>& ptrs) {
     }
 }
 
-void* MetalNet::getDevice() const {
+MTLDevicePtr MetalNet::getDevice() const {
     @autoreleasepool {
         if (!impl) return nullptr;
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
@@ -339,7 +339,7 @@ void MetalNet::reset() {
 }
 
 // MetalBackendNode implementation
-MetalBackendNode::MetalBackendNode(void* tensor_) : BackendNode(DNN_BACKEND_METAL) {
+MetalBackendNode::MetalBackendNode(MPSGraphTensorPtr tensor_) : BackendNode(DNN_BACKEND_METAL) {
     tensor = tensor_;
 }
 
@@ -387,7 +387,7 @@ void MetalBackendWrapper::setHostDirty() {
     // Dirty tracking will be implemented in Phase 1
 }
 
-void MetalBackendWrapper::setDevice(void* device) {
+void MetalBackendWrapper::setDevice(MTLDevicePtr device) {
     metalDevice = device;
 }
 

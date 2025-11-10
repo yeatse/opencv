@@ -14,33 +14,38 @@ namespace cv { namespace dnn {
 
 #ifdef HAVE_METAL
 
+// Opaque pointer types for Metal/MPSGraph objects
+// These hide Objective-C types from C++ headers
+typedef void* MPSGraphNetImplPtr;    // Opaque pointer to MPSGraphNetImpl*
+typedef void* MPSGraphTensorPtr;     // Opaque pointer to MPSGraphTensor*
+
 // Graph builder class for Metal backend
 // Encapsulates graph building operations similar to ml::GraphBuilder in WebNN
 class MetalGraphBuilder
 {
 public:
-    MetalGraphBuilder(void* graphImpl);  // MPSGraphNetImpl* (opaque)
+    MetalGraphBuilder(MPSGraphNetImplPtr graphImpl);
 
-    // Operation builders (return MPSGraphTensor* as void*)
-    void* Relu(void* inputTensor, const std::string& name);
-    void* Add(void* tensor1, void* tensor2, const std::string& name);
-    void* Mul(void* tensor1, void* tensor2, const std::string& name);
-    void* Max(void* tensor1, void* tensor2, const std::string& name);
-    void* Min(void* tensor1, void* tensor2, const std::string& name);
-    void* Div(void* tensor1, void* tensor2, const std::string& name);
-    void* Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
-                 const std::vector<int>& strides, const std::vector<int>& paddings,
-                 const std::vector<int>& dilations, int groups, const std::string& name);
+    // Operation builders (return MPSGraphTensorPtr)
+    MPSGraphTensorPtr Relu(MPSGraphTensorPtr inputTensor, const std::string& name);
+    MPSGraphTensorPtr Add(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
+    MPSGraphTensorPtr Mul(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
+    MPSGraphTensorPtr Max(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
+    MPSGraphTensorPtr Min(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
+    MPSGraphTensorPtr Div(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
+    MPSGraphTensorPtr Conv2d(MPSGraphTensorPtr inputTensor, MPSGraphTensorPtr weightsTensor, MPSGraphTensorPtr biasTensor,
+                             const std::vector<int>& strides, const std::vector<int>& paddings,
+                             const std::vector<int>& dilations, int groups, const std::string& name);
 
     // Tensor management
-    void* GetTensor(const std::string& name);
-    void AddTensor(const std::string& name, void* tensor);
+    MPSGraphTensorPtr GetTensor(const std::string& name);
+    void AddTensor(const std::string& name, MPSGraphTensorPtr tensor);
 
     // Constant tensor creation
-    void* Constant(const cv::Mat& data, const std::string& name);
+    MPSGraphTensorPtr Constant(const cv::Mat& data, const std::string& name);
 
 private:
-    void* impl;  // MPSGraphNetImpl* (opaque pointer)
+    MPSGraphNetImplPtr impl;
 };
 
 #endif  // HAVE_METAL

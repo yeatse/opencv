@@ -44,10 +44,10 @@ static MPSDataType getMPSDataType(int matType) {
 }
 
 // MetalGraphBuilder implementation
-MetalGraphBuilder::MetalGraphBuilder(void* graphImpl) : impl(graphImpl) {
+MetalGraphBuilder::MetalGraphBuilder(MPSGraphNetImplPtr graphImpl) : impl(graphImpl) {
 }
 
-void* MetalGraphBuilder::Relu(void* inputTensor, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Relu(MPSGraphTensorPtr inputTensor, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !inputTensor) return nullptr;
@@ -63,7 +63,7 @@ void* MetalGraphBuilder::Relu(void* inputTensor, const std::string& name) {
     }
 }
 
-void* MetalGraphBuilder::Add(void* tensor1, void* tensor2, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Add(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor1 || !tensor2) return nullptr;
@@ -81,7 +81,7 @@ void* MetalGraphBuilder::Add(void* tensor1, void* tensor2, const std::string& na
     }
 }
 
-void* MetalGraphBuilder::Mul(void* tensor1, void* tensor2, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Mul(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor1 || !tensor2) return nullptr;
@@ -99,7 +99,7 @@ void* MetalGraphBuilder::Mul(void* tensor1, void* tensor2, const std::string& na
     }
 }
 
-void* MetalGraphBuilder::Max(void* tensor1, void* tensor2, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Max(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor1 || !tensor2) return nullptr;
@@ -117,7 +117,7 @@ void* MetalGraphBuilder::Max(void* tensor1, void* tensor2, const std::string& na
     }
 }
 
-void* MetalGraphBuilder::Min(void* tensor1, void* tensor2, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Min(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor1 || !tensor2) return nullptr;
@@ -135,7 +135,7 @@ void* MetalGraphBuilder::Min(void* tensor1, void* tensor2, const std::string& na
     }
 }
 
-void* MetalGraphBuilder::Div(void* tensor1, void* tensor2, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Div(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor1 || !tensor2) return nullptr;
@@ -153,7 +153,7 @@ void* MetalGraphBuilder::Div(void* tensor1, void* tensor2, const std::string& na
     }
 }
 
-void* MetalGraphBuilder::Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
+MPSGraphTensorPtr MetalGraphBuilder::Conv2d(MPSGraphTensorPtr inputTensor, MPSGraphTensorPtr weightsTensor, MPSGraphTensorPtr biasTensor,
                                   const std::vector<int>& strides, const std::vector<int>& paddings,
                                   const std::vector<int>& dilations, int groups, const std::string& name) {
     @autoreleasepool {
@@ -197,7 +197,7 @@ void* MetalGraphBuilder::Conv2d(void* inputTensor, void* weightsTensor, void* bi
     }
 }
 
-void* MetalGraphBuilder::GetTensor(const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::GetTensor(const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl) return nullptr;
@@ -208,7 +208,7 @@ void* MetalGraphBuilder::GetTensor(const std::string& name) {
     }
 }
 
-void MetalGraphBuilder::AddTensor(const std::string& name, void* tensor) {
+void MetalGraphBuilder::AddTensor(const std::stringAddTensor(const std::string& name, void* tensor) name, MPSGraphTensorPtr tensor) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl || !tensor) return;
@@ -219,7 +219,7 @@ void MetalGraphBuilder::AddTensor(const std::string& name, void* tensor) {
     }
 }
 
-void* MetalGraphBuilder::Constant(const cv::Mat& data, const std::string& name) {
+MPSGraphTensorPtr MetalGraphBuilder::Constant(const cv::Mat& data, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
         if (!netImpl) return nullptr;

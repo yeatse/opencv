@@ -27,6 +27,12 @@ constexpr bool haveMetal() {
 
 #ifdef HAVE_METAL
 
+// Opaque pointer types for Metal backend objects
+// These hide Objective-C types from C++ headers
+typedef void* MTLDevicePtr;          // Opaque pointer to id<MTLDevice>
+typedef void* MTLBufferPtr;          // Opaque pointer to id<MTLBuffer>
+typedef void* MPSGraphTensorDataPtr; // Opaque pointer to MPSGraphTensorData*
+
 class MetalBackendNode;
 class MetalBackendWrapper;
 
@@ -44,8 +50,8 @@ public:
 
     void forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers, bool isAsync);
 
-    std::vector<void*> setInputs(const std::vector<cv::Mat>& inputs,
-                                  const std::vector<std::string>& names);
+    std::vector<MPSGraphTensorPtr> setInputs(const std::vector<cv::Mat>& inputs,
+                                             const std::vector<std::string>& names);
 
     void addBlobs(const std::vector<cv::Ptr<BackendWrapper>>& ptrs);
 
@@ -56,10 +62,10 @@ public:
     MetalGraphBuilder& getBuilder();
 
     // Device management
-    void* getDevice() const;  // Returns id<MTLDevice> as void*
+    MTLDevicePtr getDevice() const;
 
     // Opaque pointer to Objective-C implementation (MPSGraphNetImpl)
-    void* impl;
+    MPSGraphNetImplPtr impl;
 
     // Metal resources (managed by impl)
     std::unordered_map<std::string, cv::Ptr<MetalBackendWrapper>> allBlobs;
@@ -77,10 +83,10 @@ private:
 class MetalBackendNode : public BackendNode
 {
 public:
-    MetalBackendNode(void* tensor);  // MPSGraphTensor* (internal)
+    MetalBackendNode(MPSGraphTensorPtr tensor);
 
     std::string name;
-    void* tensor;           // MPSGraphTensor* (opaque to C++, implementation detail)
+    MPSGraphTensorPtr tensor;
     Ptr<MetalNet> net;      // Reference to parent graph
 };
 
@@ -94,14 +100,14 @@ public:
     virtual void setHostDirty() CV_OVERRIDE;
 
     // Device management - share device from MetalNet
-    void setDevice(void* device);  // device is id<MTLDevice>
-    void* getDevice() const { return metalDevice; }
+    void setDevice(MTLDevicePtr device);
+    MTLDevicePtr getDevice() const { return metalDevice; }
 
     std::string name;
     Mat* host;                  // CPU memory (may point to hostClone if original was non-continuous)
-    void* metalBuffer;          // id<MTLBuffer> (opaque)
-    void* tensorData;           // MPSGraphTensorData* (opaque, internal)
-    void* metalDevice;          // id<MTLDevice> (opaque) - shared from MetalNet
+    MTLBufferPtr metalBuffer;
+    MPSGraphTensorDataPtr tensorData;
+    MTLDevicePtr metalDevice;   // Shared from MetalNet
     size_t size;
     std::vector<int32_t> dimensions;
 
