@@ -772,7 +772,7 @@ public:
         auto& builder = net->getBuilder();
 
         // Start with first input tensor
-        void* resultTensor = firstNode->tensor;
+        metal::MPSGraphTensorPtr resultTensor = firstNode->tensor;
 
         // Apply operation with each subsequent input
         for (size_t i = 1; i < nodes.size(); i++)

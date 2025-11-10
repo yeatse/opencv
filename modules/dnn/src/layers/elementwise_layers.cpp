@@ -229,7 +229,7 @@ public:
         Ptr<MetalNet> net = inputNode->net;
 
         // Add ReLU operation to the graph
-        void* outputTensor = func.initMetalAPI(net, inputNode->tensor, Layer::name);
+        metal::MPSGraphTensorPtr outputTensor = func.initMetalAPI(net, inputNode->tensor, Layer::name);
 
         // Create output node
         Ptr<MetalBackendNode> outputNode = Ptr<MetalBackendNode>(new MetalBackendNode(outputTensor));
@@ -349,7 +349,7 @@ struct BaseFunctor
     bool tryQuantize(const std::vector<std::vector<float>>&, const std::vector<std::vector<int>>&, LayerParams&) { return false; }
 
 #ifdef HAVE_METAL
-    void* initMetalAPI(Ptr<MetalNet>&, void*, const std::string&)
+    metal::MPSGraphTensorPtr initMetalAPI(Ptr<MetalNet>&, metal::MPSGraphTensorPtr, const std::string&)
     {
         CV_Error(Error::StsNotImplemented, "Metal backend not implemented for this layer");
         return nullptr;
@@ -546,7 +546,7 @@ struct ReLUFunctor : public BaseFunctor
 #endif
 
 #ifdef HAVE_METAL
-    void* initMetalAPI(Ptr<MetalNet>& net, void* inputTensor, const std::string& name)
+    metal::MPSGraphTensorPtr initMetalAPI(Ptr<MetalNet>& net, metal::MPSGraphTensorPtr inputTensor, const std::string& name)
     {
         // Use MetalGraphBuilder to add ReLU operation to the graph
         return net->getBuilder().Relu(inputTensor, name);

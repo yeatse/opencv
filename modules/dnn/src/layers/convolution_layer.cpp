@@ -1037,7 +1037,7 @@ public:
         auto& builder = net->getBuilder();
 
         // Get input tensor
-        void* inputTensor = node->tensor;
+        metal::MPSGraphTensorPtr inputTensor = node->tensor;
 
         // Prepare weights
         // Metal expects weights in OIHW format [outputChannels, inputChannels/groups, kernelH, kernelW]
@@ -1057,10 +1057,10 @@ public:
 
         // Create constant tensor for weights
         std::string weightsName = name + "_weights";
-        void* weightsTensor = builder.Constant(weights, weightsName);
+        metal::MPSGraphTensorPtr weightsTensor = builder.Constant(weights, weightsName);
 
         // Prepare bias if present
-        void* biasTensor = nullptr;
+        metal::MPSGraphTensorPtr biasTensor = nullptr;
         if (hasBias() || !biasvec.empty())
         {
             // Get bias data
@@ -1094,9 +1094,9 @@ public:
         std::vector<int> dilationsVec = {static_cast<int>(dilations[0]), static_cast<int>(dilations[1])};
 
         // Build convolution operation
-        void* outputTensor = builder.Conv2d(inputTensor, weightsTensor, biasTensor,
-                                            stridesVec, paddingsVec, dilationsVec,
-                                            groups, name);
+        metal::MPSGraphTensorPtr outputTensor = builder.Conv2d(inputTensor, weightsTensor, biasTensor,
+                                                                stridesVec, paddingsVec, dilationsVec,
+                                                                groups, name);
 
         // Create output node
         Ptr<MetalBackendNode> outputNode = new MetalBackendNode(outputTensor);
