@@ -106,7 +106,6 @@ CV__DNN_INLINE_NS_BEGIN
         DNN_TARGET_HDDL,
         DNN_TARGET_NPU,
         DNN_TARGET_CPU_FP16, // Only the ARM platform is supported. Low precision computing, accelerate model inference.
-        DNN_TARGET_METAL,    // Apple Metal framework for GPU acceleration on macOS/iOS.
     };
 
     /**
