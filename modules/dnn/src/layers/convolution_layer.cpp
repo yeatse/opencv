@@ -1091,8 +1091,15 @@ public:
             }
 
             // Create bias Mat in shape [1, numOutput, 1, 1] for broadcasting
-            Mat bias(std::vector<int>{1, biasSize, 1, 1}, CV_32F);
+            // Create as continuous Mat and ensure it stays continuous
+            std::vector<int> biasShape = {1, biasSize, 1, 1};
+            Mat bias(biasShape, CV_32F);
             memcpy(bias.ptr<float>(), biasData, biasSize * sizeof(float));
+
+            // Ensure the Mat is continuous (required by Metal backend)
+            if (!bias.isContinuous()) {
+                bias = bias.clone();
+            }
 
             // Create bias wrapper and placeholder
             Ptr<MetalBackendWrapper> biasWrapper = new MetalBackendWrapper(preferableTarget, bias);
