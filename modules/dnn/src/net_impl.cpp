@@ -121,6 +121,9 @@ void Net::Impl::validateBackendAndTarget()
     CV_Assert(preferableBackend != DNN_BACKEND_TIMVX ||
               preferableTarget == DNN_TARGET_NPU);
 
+    // Note: DNN_BACKEND_METAL does not validate preferableTarget.
+    // The target setting is a no-op for Metal backend, which always uses GPU.
+
     CV_Assert(preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NGRAPH && "Inheritance internal error");
 }
 

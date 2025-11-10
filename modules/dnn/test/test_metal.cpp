@@ -34,6 +34,28 @@ TEST(DNN_Metal, backend_selection_gpu_target)
     ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_OPENCL)); // GPU target
 }
 
+TEST(DNN_Metal, target_is_noop)
+{
+    // Test that preferableTarget setting is a no-op for Metal backend.
+    // Metal backend always uses GPU regardless of the target setting.
+    // This test verifies that any target can be set without validation errors.
+    Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
+    net.setPreferableBackend(DNN_BACKEND_METAL);
+
+    // All these target settings should work (target is ignored by Metal backend)
+    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_CPU));
+    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_OPENCL));
+    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_OPENCL_FP16));
+    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_CPU_FP16));
+
+    // Verify inference works regardless of target setting
+    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    net.setInput(input);
+    Mat output;
+    ASSERT_NO_THROW(output = net.forward());
+    ASSERT_FALSE(output.empty());
+}
+
 TEST(DNN_Metal, basic_inference_fallback)
 {
     // Phase 0: Test that inference works via CPU fallback
