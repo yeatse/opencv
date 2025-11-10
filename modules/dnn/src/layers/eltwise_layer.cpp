@@ -47,6 +47,7 @@
 #include "../op_inf_engine.hpp"
 #include "../ie_ngraph.hpp"
 #include "../op_cann.hpp"
+#include "../op_metal.hpp"
 
 #include <opencv2/dnn/shape_utils.hpp>
 
@@ -182,6 +183,17 @@ public:
                 return op == SUM && coeffs.empty();
             return channelsModeInput == ELTWISE_CHANNNELS_SAME;
         }
+
+#ifdef HAVE_METAL
+        if (backendId == DNN_BACKEND_METAL)
+        {
+            // Support SUM (addition) and PROD (multiplication) operations
+            // Only support simple cases without coefficients and with same channel mode
+            return (op == SUM || op == PROD) &&
+                   channelsMode == ELTWISE_CHANNNELS_SAME &&
+                   coeffs.empty();
+        }
+#endif
 
         return backendId == DNN_BACKEND_OPENCV ||
                (backendId == DNN_BACKEND_HALIDE && op != DIV)  // TODO: not implemented, see PR #15811
@@ -746,6 +758,50 @@ public:
                             &inputs[0], (int)inputs.size(), outputs[0],
                             nstripes);
     }
+
+#ifdef HAVE_METAL
+    virtual Ptr<BackendNode> initMetal(const std::vector<Ptr<BackendWrapper>>& inputs,
+                                        const std::vector<Ptr<BackendNode>>& nodes) CV_OVERRIDE
+    {
+        CV_Assert(nodes.size() >= 2);
+        CV_Assert(op == SUM || op == PROD);
+        CV_Assert(coeffs.empty());
+        CV_Assert(channelsMode == ELTWISE_CHANNNELS_SAME);
+
+        // Get first input node
+        Ptr<MetalBackendNode> firstNode = nodes[0].dynamicCast<MetalBackendNode>();
+        CV_Assert(!firstNode.empty());
+        Ptr<MetalNet> net = firstNode->net;
+
+        // Start with first input tensor
+        void* resultTensor = firstNode->tensor;
+
+        // Apply operation with each subsequent input
+        for (size_t i = 1; i < nodes.size(); i++)
+        {
+            Ptr<MetalBackendNode> inputNode = nodes[i].dynamicCast<MetalBackendNode>();
+            CV_Assert(!inputNode.empty());
+
+            std::string opName = name + "_op_" + std::to_string(i);
+
+            if (op == SUM)
+            {
+                resultTensor = net->addAddition(resultTensor, inputNode->tensor, opName);
+            }
+            else if (op == PROD)
+            {
+                resultTensor = net->addMultiplication(resultTensor, inputNode->tensor, opName);
+            }
+        }
+
+        // Create output node with final result
+        Ptr<MetalBackendNode> outputNode = Ptr<MetalBackendNode>(new MetalBackendNode(resultTensor));
+        outputNode->net = net;
+        outputNode->name = name;
+
+        return outputNode;
+    }
+#endif
 
 #ifdef HAVE_CUDA
     Ptr<BackendNode> initCUDA(

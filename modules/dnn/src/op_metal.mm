@@ -378,6 +378,24 @@ void* MetalNet::addAddition(void* tensor1, void* tensor2, const std::string& nam
     }
 }
 
+void* MetalNet::addMultiplication(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph multiplicationWithPrimaryTensor:t1
+                                                                secondaryTensor:t2
+                                                                          name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        addTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
 void* MetalNet::addConv2D(void* inputTensor, void* weightsTensor, void* biasTensor,
                            const std::vector<int>& strides, const std::vector<int>& paddings,
                            const std::vector<int>& dilations, int groups, const std::string& name) {

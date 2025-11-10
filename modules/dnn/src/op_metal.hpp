@@ -50,6 +50,7 @@ public:
     // Graph building helper methods (used by layer initMetal())
     void* addReLU(void* inputTensor, const std::string& name);
     void* addAddition(void* tensor1, void* tensor2, const std::string& name);
+    void* addMultiplication(void* tensor1, void* tensor2, const std::string& name);
     void* addConv2D(void* inputTensor, void* weightsTensor, void* biasTensor,
                      const std::vector<int>& strides, const std::vector<int>& paddings,
                      const std::vector<int>& dilations, int groups, const std::string& name);
