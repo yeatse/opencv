@@ -302,6 +302,10 @@ TEST(DNN_Metal, eltwise_add)
     net.connect(0, 0, eltwise_id, 0);  // Connect input1 to eltwise
     net.connect(1, 0, eltwise_id, 1);  // Connect input2 to eltwise
 
+    // Register input names with the network
+    std::vector<String> inputNames = {"input1", "input2"};
+    net.setInputsNames(inputNames);
+
     // Prepare test inputs (1x1x4x4)
     Mat input1(4, 4, CV_32F);
     Mat input2(4, 4, CV_32F);
@@ -365,6 +369,10 @@ TEST(DNN_Metal, eltwise_multiply)
     int eltwise_id = net.addLayer(eltwiseParams.name, eltwiseParams.type, eltwiseParams);
     net.connect(0, 0, eltwise_id, 0);  // Connect input1 to eltwise
     net.connect(1, 0, eltwise_id, 1);  // Connect input2 to eltwise
+
+    // Register input names with the network
+    std::vector<String> inputNames = {"input1", "input2"};
+    net.setInputsNames(inputNames);
 
     // Prepare test inputs (1x1x4x4)
     Mat input1(4, 4, CV_32F);
@@ -435,6 +443,10 @@ TEST(DNN_Metal, eltwise_add_three_inputs)
     net.connect(0, 0, eltwise_id, 0);  // Connect input1 to eltwise
     net.connect(1, 0, eltwise_id, 1);  // Connect input2 to eltwise
     net.connect(2, 0, eltwise_id, 2);  // Connect input3 to eltwise
+
+    // Register input names with the network
+    std::vector<String> inputNames = {"input1", "input2", "input3"};
+    net.setInputsNames(inputNames);
 
     // Prepare test inputs (1x1x4x4)
     Mat input1(4, 4, CV_32F);
