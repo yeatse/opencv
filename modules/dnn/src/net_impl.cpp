@@ -114,6 +114,10 @@ void Net::Impl::validateBackendAndTarget()
                   preferableTarget == DNN_TARGET_OPENCL);
     }
 #endif
+#ifdef HAVE_METAL
+    CV_Assert(preferableBackend != DNN_BACKEND_METAL ||
+              preferableTarget == DNN_TARGET_METAL);
+#endif
     CV_Assert(preferableBackend != DNN_BACKEND_VKCOM ||
               preferableTarget == DNN_TARGET_VULKAN);
     CV_Assert(preferableBackend != DNN_BACKEND_CUDA ||

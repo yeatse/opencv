@@ -10,10 +10,10 @@ namespace opencv_test { namespace {
 
 TEST(DNN_Metal, backend_availability)
 {
-    // Test that Metal backend can be selected on Apple platforms
+    // Test that Metal backend can be selected on Apple platforms with DNN_TARGET_METAL
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
     ASSERT_NO_THROW(net.setPreferableBackend(DNN_BACKEND_METAL));
-    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_CPU));
+    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_METAL));
 }
 
 TEST(DNN_Metal, backend_selection)
@@ -22,27 +22,29 @@ TEST(DNN_Metal, backend_selection)
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
 
     ASSERT_NO_THROW(net.setPreferableBackend(DNN_BACKEND_METAL));
-    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_CPU));
+    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_METAL));
 }
 
-TEST(DNN_Metal, backend_selection_gpu_target)
+TEST(DNN_Metal, backend_target_validation)
 {
-    // Test that Metal backend can be selected with GPU target
+    // Test that Metal backend rejects incompatible targets
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
 
-    ASSERT_NO_THROW(net.setPreferableBackend(DNN_BACKEND_METAL));
-    ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_OPENCL)); // GPU target
+    net.setPreferableBackend(DNN_BACKEND_METAL);
+    // Setting an incompatible target should throw during setUpNet
+    net.setPreferableTarget(DNN_TARGET_OPENCL);
+    ASSERT_ANY_THROW(net.forward(Mat::ones(1, 3, 224, 224, CV_32F)));
 }
 
 TEST(DNN_Metal, basic_inference_fallback)
 {
-    // Phase 0: Test that inference works via CPU fallback
-    // Metal layers are not implemented yet, so all layers should fall back to CPU
+    // Test that inference works with layers falling back to CPU when needed
+    // Layers without Metal support automatically fall back to CPU
 
     // Load a simple model
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
     net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
+    net.setPreferableTarget(DNN_TARGET_METAL);
 
     // Create input
     int sizes[] = {1, 3, 224, 224};
@@ -65,7 +67,7 @@ TEST(DNN_Metal, compare_with_cpu_backend)
     // Load model
     Net netMetal = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
     netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-    netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    netMetal.setPreferableTarget(DNN_TARGET_METAL);
 
     Net netCPU = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
     netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
@@ -144,7 +146,7 @@ TEST(DNN_Metal, input_shapes)
     // Test various input shapes
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
     net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
+    net.setPreferableTarget(DNN_TARGET_METAL);
 
     std::vector<std::pair<int, int>> sizes = {
         {224, 224},
@@ -167,11 +169,11 @@ TEST(DNN_Metal, input_shapes)
 TEST(DNN_Metal, fallback_detection)
 {
     // Test that we can detect when layers are falling back to CPU
-    // In Phase 0, ALL layers should fall back to CPU
+    // When we request DNN_TARGET_METAL, layers without Metal support should fall back to CPU
 
     Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
     net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
+    net.setPreferableTarget(DNN_TARGET_METAL);
 
     int sizes[] = {1, 3, 224, 224};
     Mat input = Mat::ones(4, sizes, CV_32F);
@@ -180,24 +182,29 @@ TEST(DNN_Metal, fallback_detection)
 
     // Check layer backends
     std::vector<String> layerNames = net.getLayerNames();
-    bool allFallback = true;
+    int metalLayers = 0;
+    int cpuFallbackLayers = 0;
 
     for (const auto& name : layerNames)
     {
         Ptr<dnn::Layer> layer = net.getLayer(net.getLayerId(name));
 
-        // In Phase 0, no layers support Metal backend yet
-        // So all should fall back to CPU (preferableTarget != DNN_TARGET_CPU means it's using Metal)
-        if (layer->preferableTarget != DNN_TARGET_CPU && layer->preferableTarget != -1)
+        // Layers with Metal support will have preferableTarget == DNN_TARGET_METAL
+        // Layers without Metal support will fall back with preferableTarget == DNN_TARGET_CPU
+        if (layer->preferableTarget == DNN_TARGET_METAL)
         {
-            allFallback = false;
-            std::cout << "Layer " << name << " is NOT falling back (unexpected in Phase 0)" << std::endl;
+            metalLayers++;
+        }
+        else if (layer->preferableTarget == DNN_TARGET_CPU || layer->preferableTarget == -1)
+        {
+            cpuFallbackLayers++;
         }
     }
 
-    // In Phase 0, all layers should fall back to CPU
-    // This test will need to be updated in Phase 1 when Metal implementations are added
-    EXPECT_TRUE(allFallback) << "Phase 0: All layers should fall back to CPU";
+    // SqueezeNet has limited Metal support (ReLU, Eltwise), so most layers fall back
+    // This validates that fallback mechanism works correctly
+    EXPECT_GT(cpuFallbackLayers, 0) << "Some layers should fall back to CPU";
+    std::cout << "Metal layers: " << metalLayers << ", CPU fallback layers: " << cpuFallbackLayers << std::endl;
 }
 
 TEST(DNN_Metal, backend_switching)
@@ -216,7 +223,7 @@ TEST(DNN_Metal, backend_switching)
 
     // Switch to Metal backend
     net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
+    net.setPreferableTarget(DNN_TARGET_METAL);
     net.setInput(input);
     Mat outputMetal = net.forward();
 
@@ -252,12 +259,13 @@ TEST(DNN_Metal, relu_layer)
 
     // Test with CPU backend
     net.setPreferableBackend(DNN_BACKEND_OPENCV);
+    net.setPreferableTarget(DNN_TARGET_CPU);
     net.setInput(input);
     Mat outputCPU = net.forward();
 
     // Test with Metal backend
     net.setPreferableBackend(DNN_BACKEND_METAL);
-    net.setPreferableTarget(DNN_TARGET_CPU);
+    net.setPreferableTarget(DNN_TARGET_METAL);
     net.setInput(input);
     Mat outputMetal = net.forward();
 
@@ -307,7 +315,7 @@ TEST(DNN_Metal, eltwise_add)
         std::vector<String> inputNames = {"input1", "input2"};
         netMetal.setInputsNames(inputNames);
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+        netMetal.setPreferableTarget(DNN_TARGET_METAL);
     }
 
     // Prepare test inputs (1x1x4x4) - must be 4D tensors
@@ -377,7 +385,7 @@ TEST(DNN_Metal, eltwise_multiply)
         std::vector<String> inputNames = {"input1", "input2"};
         netMetal.setInputsNames(inputNames);
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+        netMetal.setPreferableTarget(DNN_TARGET_METAL);
     }
 
     // Prepare test inputs (1x1x4x4) - must be 4D tensors
@@ -449,7 +457,7 @@ TEST(DNN_Metal, eltwise_add_three_inputs)
         std::vector<String> inputNames = {"input1", "input2", "input3"};
         netMetal.setInputsNames(inputNames);
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+        netMetal.setPreferableTarget(DNN_TARGET_METAL);
     }
 
     // Prepare test inputs (1x1x4x4) - must be 4D tensors
@@ -524,7 +532,7 @@ TEST(DNN_Metal, eltwise_max)
         std::vector<String> inputNames = {"input1", "input2"};
         netMetal.setInputsNames(inputNames);
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+        netMetal.setPreferableTarget(DNN_TARGET_METAL);
     }
 
     // Prepare test inputs (1x1x4x4)
@@ -593,7 +601,7 @@ TEST(DNN_Metal, eltwise_min)
         std::vector<String> inputNames = {"input1", "input2"};
         netMetal.setInputsNames(inputNames);
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+        netMetal.setPreferableTarget(DNN_TARGET_METAL);
     }
 
     // Prepare test inputs (1x1x4x4)
@@ -662,7 +670,7 @@ TEST(DNN_Metal, eltwise_div)
         std::vector<String> inputNames = {"input1", "input2"};
         netMetal.setInputsNames(inputNames);
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
-        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+        netMetal.setPreferableTarget(DNN_TARGET_METAL);
     }
 
     // Prepare test inputs (1x1x4x4)
