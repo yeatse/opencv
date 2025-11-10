@@ -724,6 +724,103 @@ TEST(DNN_Metal, eltwise_div)
     }
 }
 
+TEST(DNN_Metal, convolution_layer)
+{
+    // Test 2D convolution with Metal backend
+    // Create a simple 3x3 convolution with 1 input channel and 2 output channels
+
+    // Prepare a simple model with convolution
+    Net netMetal;
+    netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+    netMetal.setPreferableTarget(DNN_TARGET_CPU);
+
+    // Read a model with convolution layer (using a pre-existing ONNX model)
+    // For this test, we'll use SqueezeNet which has convolution layers
+    Net net = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
+
+    // Set up Metal backend
+    net.setPreferableBackend(DNN_BACKEND_METAL);
+    net.setPreferableTarget(DNN_TARGET_CPU);
+
+    // Create test input (1 batch, 3 channels, 224x224)
+    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+
+    // Run inference with Metal backend
+    net.setInput(input);
+    Mat outputMetal;
+    ASSERT_NO_THROW(outputMetal = net.forward());
+    ASSERT_FALSE(outputMetal.empty());
+
+    // Also test with CPU backend for comparison
+    Net netCPU = readNetFromONNX(findDataFile("dnn/onnx/models/squeezenet.onnx"));
+    netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+    netCPU.setPreferableTarget(DNN_TARGET_CPU);
+    netCPU.setInput(input);
+    Mat outputCPU = netCPU.forward();
+
+    // Results should be close (allowing for numerical differences)
+    normAssert(outputCPU, outputMetal, "Convolution: Metal vs CPU", 1e-3, 1e-4);
+}
+
+TEST(DNN_Metal, simple_conv_test)
+{
+    // Test a simple manually created convolution layer
+    Net netCPU, netMetal;
+
+    // Create a simple 1-channel 3x3 convolution
+    LayerParams convParams;
+    convParams.name = "conv1";
+    convParams.type = "Convolution";
+    convParams.set("kernel_size", 3);
+    convParams.set("num_output", 2);  // 2 output channels
+    convParams.set("pad", 1);
+    convParams.set("stride", 1);
+    convParams.set("bias_term", true);
+
+    // Create weights and bias
+    // Weights: [num_output, num_input, kernel_h, kernel_w] = [2, 1, 3, 3]
+    Mat weights(std::vector<int>{2, 1, 3, 3}, CV_32F);
+    randn(weights, 0.0f, 0.5f);  // Random weights
+
+    // Bias: [num_output] = [2]
+    Mat bias(2, 1, CV_32F);
+    randn(bias, 0.0f, 0.1f);  // Random bias
+
+    convParams.blobs.push_back(weights);
+    convParams.blobs.push_back(bias);
+
+    // Setup CPU network
+    {
+        int conv_id = netCPU.addLayerToPrev(convParams.name, convParams.type, convParams);
+        netCPU.setInputsNames({"input"});
+        netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
+        netCPU.setPreferableTarget(DNN_TARGET_CPU);
+    }
+
+    // Setup Metal network
+    {
+        int conv_id = netMetal.addLayerToPrev(convParams.name, convParams.type, convParams);
+        netMetal.setInputsNames({"input"});
+        netMetal.setPreferableBackend(DNN_BACKEND_METAL);
+        netMetal.setPreferableTarget(DNN_TARGET_CPU);
+    }
+
+    // Create test input (1 batch, 1 channel, 5x5)
+    Mat input(std::vector<int>{1, 1, 5, 5}, CV_32F);
+    randn(input, 0.0f, 1.0f);  // Random input
+
+    // Test with CPU backend
+    netCPU.setInput(input, "input");
+    Mat outputCPU = netCPU.forward();
+
+    // Test with Metal backend
+    netMetal.setInput(input, "input");
+    Mat outputMetal = netMetal.forward();
+
+    // Results should match closely
+    normAssert(outputCPU, outputMetal, "Simple Conv: Metal vs CPU", 1e-3, 1e-4);
+}
+
 #else  // !HAVE_METAL
 
 TEST(DNN_Metal, backend_not_available)

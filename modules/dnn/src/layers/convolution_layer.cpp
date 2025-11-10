@@ -49,6 +49,7 @@
 #include "../op_vkcom.hpp"
 #include "../op_webnn.hpp"
 #include "../op_cann.hpp"
+#include "../op_metal.hpp"
 
 #include <opencv2/core/utils/configuration.private.hpp>
 #include <opencv2/core/utils/logger.hpp>
@@ -357,6 +358,17 @@ public:
             return true;
         }
 #endif // HAVE_CANN
+#ifdef HAVE_METAL
+        if (backendId == DNN_BACKEND_METAL)
+        {
+            if (ksize != 2)
+            {
+                CV_LOG_WARNING(NULL, "Metal backend only supports Conv2d for now.");
+                return false;
+            }
+            return true;
+        }
+#endif // HAVE_METAL
         return false;
     }
 
@@ -1010,6 +1022,115 @@ public:
         return Ptr<BackendNode>(new WebnnBackendNode(operand));
     }
 #endif // HAVE_WEBNN
+
+#ifdef HAVE_METAL
+    virtual Ptr<BackendNode> initMetal(const std::vector<Ptr<BackendWrapper>>& inputs,
+                                        const std::vector<Ptr<BackendNode>>& nodes) CV_OVERRIDE
+    {
+        CV_Assert(!blobs.empty());
+        CV_Assert_N(inputs.size() >= 1, nodes.size() >= 1);
+
+        Ptr<MetalBackendNode> node = nodes[0].dynamicCast<MetalBackendNode>();
+        CV_Assert(!node.empty());
+
+        Ptr<MetalNet> net = node->net;
+        auto& builder = net->getBuilder();
+
+        // Get input tensor
+        void* inputTensor = node->tensor;
+
+        // Prepare weights
+        // Metal expects weights in OIHW format [outputChannels, inputChannels/groups, kernelH, kernelW]
+        Mat weights = blobs[0];
+        CV_Assert(weights.dims == 4);  // Expecting 4D weights [O, I, H, W]
+
+        // Calculate groups
+        int inpCn = weights.size[1];
+        int outCn = weights.size[0];
+        int groups = 1;
+        if (blobs[0].size.p) {
+            // Get actual number of groups from layer params
+            // For grouped convolution: inpCn per group, total groups = total_inpCn / inpCn
+            // This is typically set during finalize
+            // For standard conv, groups = 1
+            groups = outCn / numOutput;
+            if (groups == 0) groups = 1;
+        }
+
+        // Create weights wrapper and add to network as a placeholder input
+        Ptr<MetalBackendWrapper> weightsWrapper = new MetalBackendWrapper(preferableTarget, weights);
+        weightsWrapper->setDevice(net->getDevice());
+        std::string weightsName = name + "_weights";
+        weightsWrapper->name = weightsName;
+
+        // Create placeholder tensor for weights
+        std::vector<cv::Mat> weightMats = {weights};
+        std::vector<std::string> weightNames = {weightsName};
+        std::vector<void*> weightTensors = net->setInputs(weightMats, weightNames);
+        CV_Assert(weightTensors.size() == 1);
+        void* weightsTensor = weightTensors[0];
+
+        // Add wrapper to network's blob management
+        net->allBlobs[weightsName] = weightsWrapper;
+
+        // Prepare bias if present
+        void* biasTensor = nullptr;
+        if (hasBias() || !biasvec.empty())
+        {
+            // Get bias data
+            const float* biasData = nullptr;
+            int biasSize = numOutput;
+
+            if (hasBias())
+            {
+                biasData = blobs[1].ptr<float>();
+                biasSize = blobs[1].total();
+            }
+            else if (!biasvec.empty())
+            {
+                biasData = biasvec.data();
+                biasSize = biasvec.size();
+            }
+
+            // Create bias Mat in shape [1, numOutput, 1, 1] for broadcasting
+            Mat bias(std::vector<int>{1, biasSize, 1, 1}, CV_32F);
+            memcpy(bias.ptr<float>(), biasData, biasSize * sizeof(float));
+
+            // Create bias wrapper and placeholder
+            Ptr<MetalBackendWrapper> biasWrapper = new MetalBackendWrapper(preferableTarget, bias);
+            biasWrapper->setDevice(net->getDevice());
+            std::string biasName = name + "_bias";
+            biasWrapper->name = biasName;
+
+            // Create placeholder tensor for bias
+            std::vector<cv::Mat> biasMats = {bias};
+            std::vector<std::string> biasNames = {biasName};
+            std::vector<void*> biasTensors = net->setInputs(biasMats, biasNames);
+            CV_Assert(biasTensors.size() == 1);
+            biasTensor = biasTensors[0];
+
+            // Add wrapper to network's blob management
+            net->allBlobs[biasName] = biasWrapper;
+        }
+
+        // Prepare convolution parameters
+        std::vector<int> stridesVec = {strides[0], strides[1]};
+        std::vector<int> paddingsVec = {static_cast<int>(pads_begin[0]), static_cast<int>(pads_begin[1])};
+        std::vector<int> dilationsVec = {dilations[0], dilations[1]};
+
+        // Build convolution operation
+        void* outputTensor = builder.Conv2d(inputTensor, weightsTensor, biasTensor,
+                                            stridesVec, paddingsVec, dilationsVec,
+                                            groups, name);
+
+        // Create output node
+        Ptr<MetalBackendNode> outputNode = new MetalBackendNode(outputTensor);
+        outputNode->name = name;
+        outputNode->net = net;
+
+        return outputNode;
+    }
+#endif // HAVE_METAL
 
 #ifdef HAVE_OPENCL
     bool forward_ocl(InputArrayOfArrays inps, OutputArrayOfArrays outs, OutputArrayOfArrays internals)
