@@ -26,6 +26,29 @@ constexpr bool haveMetal() {
 class MetalBackendNode;
 class MetalBackendWrapper;
 
+// Graph builder class for Metal backend
+// Encapsulates graph building operations similar to ml::GraphBuilder in WebNN
+class MetalGraphBuilder
+{
+public:
+    MetalGraphBuilder(void* graphImpl);  // MPSGraphNetImpl* (opaque)
+
+    // Operation builders (return MPSGraphTensor* as void*)
+    void* Relu(void* inputTensor, const std::string& name);
+    void* Add(void* tensor1, void* tensor2, const std::string& name);
+    void* Mul(void* tensor1, void* tensor2, const std::string& name);
+    void* Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
+                 const std::vector<int>& strides, const std::vector<int>& paddings,
+                 const std::vector<int>& dilations, int groups, const std::string& name);
+
+    // Tensor management
+    void* GetTensor(const std::string& name);
+    void AddTensor(const std::string& name, void* tensor);
+
+private:
+    void* impl;  // MPSGraphNetImpl* (opaque pointer)
+};
+
 class MetalNet
 {
 public:
@@ -47,15 +70,9 @@ public:
 
     void reset();
 
-    // Graph building helper methods (used by layer initMetal())
-    void* addReLU(void* inputTensor, const std::string& name);
-    void* addAddition(void* tensor1, void* tensor2, const std::string& name);
-    void* addMultiplication(void* tensor1, void* tensor2, const std::string& name);
-    void* addConv2D(void* inputTensor, void* weightsTensor, void* biasTensor,
-                     const std::vector<int>& strides, const std::vector<int>& paddings,
-                     const std::vector<int>& dilations, int groups, const std::string& name);
-    void* getTensor(const std::string& name);
-    void addTensor(const std::string& name, void* tensor);
+    // Graph builder for creating operations (similar to WebNN's ml::GraphBuilder)
+    // Access via getBuilder() to ensure it's initialized
+    MetalGraphBuilder& getBuilder();
 
     // Device management
     void* getDevice() const;  // Returns id<MTLDevice> as void*
@@ -71,6 +88,9 @@ public:
 
     std::vector<std::string> inputNames;
     std::vector<std::string> outputNames;
+
+private:
+    MetalGraphBuilder* builderPtr;  // Pointer to builder, initialized when impl is created
 };
 
 class MetalBackendNode : public BackendNode

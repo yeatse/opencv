@@ -83,12 +83,138 @@ static MPSDataType getMPSDataType(int matType) {
     }
 }
 
+// MetalGraphBuilder implementation
+MetalGraphBuilder::MetalGraphBuilder(void* graphImpl) : impl(graphImpl) {
+}
+
+void* MetalGraphBuilder::Relu(void* inputTensor, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !inputTensor) return nullptr;
+
+        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
+        MPSGraphTensor* output = [netImpl.graph reLUWithTensor:input
+                                                          name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalGraphBuilder::Add(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph additionWithPrimaryTensor:t1
+                                                          secondaryTensor:t2
+                                                                    name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalGraphBuilder::Mul(void* tensor1, void* tensor2, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor1 || !tensor2) return nullptr;
+
+        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
+        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
+        MPSGraphTensor* output = [netImpl.graph multiplicationWithPrimaryTensor:t1
+                                                                secondaryTensor:t2
+                                                                          name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalGraphBuilder::Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
+                                  const std::vector<int>& strides, const std::vector<int>& paddings,
+                                  const std::vector<int>& dilations, int groups, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !inputTensor || !weightsTensor) return nullptr;
+
+        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
+        MPSGraphTensor* weights = (__bridge MPSGraphTensor*)weightsTensor;
+
+        // Create convolution descriptor
+        MPSGraphConvolution2DOpDescriptor* desc = [MPSGraphConvolution2DOpDescriptor descriptorWithStrideInX:strides[1]
+                                                                                                    strideInY:strides[0]
+                                                                                              dilationRateInX:dilations[1]
+                                                                                              dilationRateInY:dilations[0]
+                                                                                                       groups:groups
+                                                                                                 paddingStyle:MPSGraphPaddingStyleExplicit
+                                                                                                   dataLayout:MPSGraphTensorNamedDataLayoutNCHW
+                                                                                                weightsLayout:MPSGraphTensorNamedDataLayoutOIHW];
+        desc.paddingLeft = paddings[1];
+        desc.paddingRight = paddings[1];
+        desc.paddingTop = paddings[0];
+        desc.paddingBottom = paddings[0];
+
+        MPSGraphTensor* output = [netImpl.graph convolution2DWithSourceTensor:input
+                                                                weightsTensor:weights
+                                                                   descriptor:desc
+                                                                         name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Add bias if provided
+        if (biasTensor) {
+            MPSGraphTensor* bias = (__bridge MPSGraphTensor*)biasTensor;
+            output = [netImpl.graph additionWithPrimaryTensor:output
+                                              secondaryTensor:bias
+                                                         name:[NSString stringWithUTF8String:(name + "_bias").c_str()]];
+        }
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
+void* MetalGraphBuilder::GetTensor(const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl) return nullptr;
+
+        NSString* nsName = [NSString stringWithUTF8String:name.c_str()];
+        MPSGraphTensor* tensor = netImpl.namedTensors[nsName];
+        return (__bridge void*)tensor;
+    }
+}
+
+void MetalGraphBuilder::AddTensor(const std::string& name, void* tensor) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !tensor) return;
+
+        NSString* nsName = [NSString stringWithUTF8String:name.c_str()];
+        MPSGraphTensor* mpsTensor = (__bridge MPSGraphTensor*)tensor;
+        netImpl.namedTensors[nsName] = mpsTensor;
+    }
+}
+
 // MetalNet implementation
-MetalNet::MetalNet() : impl(nullptr), hasNetOwner(false), isInit(false) {
+MetalNet::MetalNet() : impl(nullptr), hasNetOwner(false), isInit(false), builderPtr(nullptr) {
 }
 
 MetalNet::~MetalNet() {
     reset();
+    if (builderPtr) {
+        delete builderPtr;
+        builderPtr = nullptr;
+    }
 }
 
 void MetalNet::init(Target targetId) {
@@ -100,9 +226,21 @@ void MetalNet::init(Target targetId) {
             }
             MPSGraphNetImpl* netImpl = [[MPSGraphNetImpl alloc] initWithDevice:device];
             impl = (__bridge_retained void*)netImpl;
+
+            // Initialize the graph builder
+            if (!builderPtr) {
+                builderPtr = new MetalGraphBuilder(impl);
+            }
         }
         isInit = true;
     }
+}
+
+MetalGraphBuilder& MetalNet::getBuilder() {
+    if (!builderPtr) {
+        CV_Error(Error::StsError, "Metal graph builder not initialized. Call init() first.");
+    }
+    return *builderPtr;
 }
 
 void MetalNet::createGraph(Target targetId) {
@@ -319,129 +457,6 @@ void MetalNet::reset() {
     inputNames.clear();
     outputNames.clear();
     isInit = false;
-}
-
-// Graph building helper methods
-void* MetalNet::getTensor(const std::string& name) {
-    @autoreleasepool {
-        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
-        if (!netImpl) return nullptr;
-
-        NSString* nsName = [NSString stringWithUTF8String:name.c_str()];
-        MPSGraphTensor* tensor = netImpl.namedTensors[nsName];
-        return (__bridge void*)tensor;
-    }
-}
-
-void MetalNet::addTensor(const std::string& name, void* tensor) {
-    @autoreleasepool {
-        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
-        if (!netImpl || !tensor) return;
-
-        NSString* nsName = [NSString stringWithUTF8String:name.c_str()];
-        MPSGraphTensor* mpsTensor = (__bridge MPSGraphTensor*)tensor;
-        netImpl.namedTensors[nsName] = mpsTensor;
-    }
-}
-
-void* MetalNet::addReLU(void* inputTensor, const std::string& name) {
-    @autoreleasepool {
-        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
-        if (!netImpl || !inputTensor) return nullptr;
-
-        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
-        MPSGraphTensor* output = [netImpl.graph reLUWithTensor:input
-                                                          name:[NSString stringWithUTF8String:name.c_str()]];
-
-        // Store named tensor
-        addTensor(name, (__bridge void*)output);
-
-        return (__bridge void*)output;
-    }
-}
-
-void* MetalNet::addAddition(void* tensor1, void* tensor2, const std::string& name) {
-    @autoreleasepool {
-        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
-        if (!netImpl || !tensor1 || !tensor2) return nullptr;
-
-        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
-        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
-        MPSGraphTensor* output = [netImpl.graph additionWithPrimaryTensor:t1
-                                                          secondaryTensor:t2
-                                                                    name:[NSString stringWithUTF8String:name.c_str()]];
-
-        // Store named tensor
-        addTensor(name, (__bridge void*)output);
-
-        return (__bridge void*)output;
-    }
-}
-
-void* MetalNet::addMultiplication(void* tensor1, void* tensor2, const std::string& name) {
-    @autoreleasepool {
-        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
-        if (!netImpl || !tensor1 || !tensor2) return nullptr;
-
-        MPSGraphTensor* t1 = (__bridge MPSGraphTensor*)tensor1;
-        MPSGraphTensor* t2 = (__bridge MPSGraphTensor*)tensor2;
-        MPSGraphTensor* output = [netImpl.graph multiplicationWithPrimaryTensor:t1
-                                                                secondaryTensor:t2
-                                                                          name:[NSString stringWithUTF8String:name.c_str()]];
-
-        // Store named tensor
-        addTensor(name, (__bridge void*)output);
-
-        return (__bridge void*)output;
-    }
-}
-
-void* MetalNet::addConv2D(void* inputTensor, void* weightsTensor, void* biasTensor,
-                           const std::vector<int>& strides, const std::vector<int>& paddings,
-                           const std::vector<int>& dilations, int groups, const std::string& name) {
-    @autoreleasepool {
-        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
-        if (!netImpl || !inputTensor || !weightsTensor) return nullptr;
-
-        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
-        MPSGraphTensor* weights = (__bridge MPSGraphTensor*)weightsTensor;
-
-        // Create convolution descriptor
-        MPSGraphConvolution2DOpDescriptor* desc = [MPSGraphConvolution2DOpDescriptor descriptorWithStrideInX:strides.size() > 1 ? strides[1] : 1
-                                                                                                   strideInY:strides.size() > 0 ? strides[0] : 1
-                                                                                             dilationRateInX:dilations.size() > 1 ? dilations[1] : 1
-                                                                                             dilationRateInY:dilations.size() > 0 ? dilations[0] : 1
-                                                                                                      groups:groups
-                                                                                                paddingStyle:MPSGraphPaddingStyleExplicit
-                                                                                                  dataLayout:MPSGraphTensorNamedDataLayoutNCHW
-                                                                                               weightsLayout:MPSGraphTensorNamedDataLayoutOIHW];
-
-        // Set explicit padding
-        if (paddings.size() >= 4) {
-            desc.paddingLeft = paddings[1];
-            desc.paddingRight = paddings[3];
-            desc.paddingTop = paddings[0];
-            desc.paddingBottom = paddings[2];
-        }
-
-        MPSGraphTensor* output = [netImpl.graph convolution2DWithSourceTensor:input
-                                                               weightsTensor:weights
-                                                                  descriptor:desc
-                                                                        name:[NSString stringWithUTF8String:name.c_str()]];
-
-        // Add bias if present
-        if (biasTensor) {
-            MPSGraphTensor* bias = (__bridge MPSGraphTensor*)biasTensor;
-            output = [netImpl.graph additionWithPrimaryTensor:output
-                                              secondaryTensor:bias
-                                                         name:[NSString stringWithFormat:@"%s_bias", name.c_str()]];
-        }
-
-        // Store named tensor
-        addTensor(name, (__bridge void*)output);
-
-        return (__bridge void*)output;
-    }
 }
 
 // MetalBackendNode implementation

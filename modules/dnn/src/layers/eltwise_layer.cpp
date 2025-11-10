@@ -772,6 +772,7 @@ public:
         Ptr<MetalBackendNode> firstNode = nodes[0].dynamicCast<MetalBackendNode>();
         CV_Assert(!firstNode.empty());
         Ptr<MetalNet> net = firstNode->net;
+        auto& builder = net->getBuilder();
 
         // Start with first input tensor
         void* resultTensor = firstNode->tensor;
@@ -786,11 +787,11 @@ public:
 
             if (op == SUM)
             {
-                resultTensor = net->addAddition(resultTensor, inputNode->tensor, opName);
+                resultTensor = builder.Add(resultTensor, inputNode->tensor, opName);
             }
             else if (op == PROD)
             {
-                resultTensor = net->addMultiplication(resultTensor, inputNode->tensor, opName);
+                resultTensor = builder.Mul(resultTensor, inputNode->tensor, opName);
             }
         }
 
@@ -800,7 +801,7 @@ public:
         outputNode->name = name;
 
         // Register the final output tensor with the layer's name so it can be found during forward pass
-        net->addTensor(name, resultTensor);
+        builder.AddTensor(name, resultTensor);
 
         return outputNode;
     }

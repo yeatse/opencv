@@ -548,8 +548,8 @@ struct ReLUFunctor : public BaseFunctor
 #ifdef HAVE_METAL
     void* initMetalAPI(Ptr<MetalNet>& net, void* inputTensor, const std::string& name)
     {
-        // Use MetalNet::addReLU helper to add ReLU operation to the graph
-        return net->addReLU(inputTensor, name);
+        // Use MetalGraphBuilder to add ReLU operation to the graph
+        return net->getBuilder().Relu(inputTensor, name);
     }
 #endif
 
