@@ -673,9 +673,10 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                 }
 
                 auto inps = net->setInputs(inputs, inputNames);
-                for (auto& inp : inps) {
-                    MetalBackendNode* node = new MetalBackendNode(inp);
+                for (size_t i = 0; i < inps.size(); i++) {
+                    MetalBackendNode* node = new MetalBackendNode(inps[i]);
                     node->net = net;
+                    node->name = inputNames[i];  // Assign name so addOutput() can resolve it
                     inputNodes.emplace_back(Ptr<BackendNode>(node));
                 }
 
