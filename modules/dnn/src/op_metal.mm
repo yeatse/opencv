@@ -523,10 +523,18 @@ MetalBackendWrapper::MetalBackendWrapper(int targetId, Mat& m)
     : BackendWrapper(DNN_BACKEND_METAL, targetId), host(&m), metalBuffer(nullptr),
       tensorData(nullptr), metalDevice(nullptr), size(m.total() * m.elemSize())
 {
+    // Metal backend requires continuous Mat for efficient memory operations
+    // If the input Mat is not continuous, create a continuous clone
+    if (!m.isContinuous()) {
+        hostClone = m.clone();
+        host = &hostClone;
+        size = hostClone.total() * hostClone.elemSize();
+    }
+
     // Get dimensions
-    dimensions.resize(m.dims);
-    for (int i = 0; i < m.dims; i++) {
-        dimensions[i] = static_cast<int32_t>(m.size[i]);
+    dimensions.resize(host->dims);
+    for (int i = 0; i < host->dims; i++) {
+        dimensions[i] = static_cast<int32_t>(host->size[i]);
     }
 }
 

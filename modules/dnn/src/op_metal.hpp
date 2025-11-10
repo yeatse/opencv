@@ -120,7 +120,7 @@ public:
     void* getDevice() const { return metalDevice; }
 
     std::string name;
-    Mat* host;                  // CPU memory
+    Mat* host;                  // CPU memory (may point to hostClone if original was non-continuous)
     void* metalBuffer;          // id<MTLBuffer> (opaque)
     void* tensorData;           // MPSGraphTensorData* (opaque, internal)
     void* metalDevice;          // id<MTLDevice> (opaque) - shared from MetalNet
@@ -131,6 +131,9 @@ public:
     void allocateMetalBuffer();
     void syncToDevice();
     void syncToHost();
+
+private:
+    Mat hostClone;              // Cloned Mat if original was non-continuous
 };
 
 #endif  // HAVE_METAL
