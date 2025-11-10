@@ -48,6 +48,9 @@ public:
     void* GetTensor(const std::string& name);
     void AddTensor(const std::string& name, void* tensor);
 
+    // Constant tensor creation
+    void* Constant(const cv::Mat& data, const std::string& name);
+
 private:
     void* impl;  // MPSGraphNetImpl* (opaque pointer)
 };

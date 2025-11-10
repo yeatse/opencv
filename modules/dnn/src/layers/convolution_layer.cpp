@@ -1055,21 +1055,9 @@ public:
             if (groups == 0) groups = 1;
         }
 
-        // Create weights wrapper and add to network as a placeholder input
-        Ptr<MetalBackendWrapper> weightsWrapper = new MetalBackendWrapper(preferableTarget, weights);
-        weightsWrapper->setDevice(net->getDevice());
+        // Create constant tensor for weights
         std::string weightsName = name + "_weights";
-        weightsWrapper->name = weightsName;
-
-        // Create placeholder tensor for weights
-        std::vector<cv::Mat> weightMats = {weights};
-        std::vector<std::string> weightNames = {weightsName};
-        std::vector<void*> weightTensors = net->setInputs(weightMats, weightNames);
-        CV_Assert(weightTensors.size() == 1);
-        void* weightsTensor = weightTensors[0];
-
-        // Add wrapper to network's blob management
-        net->allBlobs[weightsName] = weightsWrapper;
+        void* weightsTensor = builder.Constant(weights, weightsName);
 
         // Prepare bias if present
         void* biasTensor = nullptr;
@@ -1095,22 +1083,9 @@ public:
             Mat bias(biasShape, CV_32F);
             memcpy(bias.ptr<float>(), biasData, biasSize * sizeof(float));
 
-            // Create bias wrapper and placeholder
-            // Note: MetalBackendWrapper will ensure continuity automatically
-            Ptr<MetalBackendWrapper> biasWrapper = new MetalBackendWrapper(preferableTarget, bias);
-            biasWrapper->setDevice(net->getDevice());
+            // Create constant tensor for bias
             std::string biasName = name + "_bias";
-            biasWrapper->name = biasName;
-
-            // Create placeholder tensor for bias
-            std::vector<cv::Mat> biasMats = {bias};
-            std::vector<std::string> biasNames = {biasName};
-            std::vector<void*> biasTensors = net->setInputs(biasMats, biasNames);
-            CV_Assert(biasTensors.size() == 1);
-            biasTensor = biasTensors[0];
-
-            // Add wrapper to network's blob management
-            net->allBlobs[biasName] = biasWrapper;
+            biasTensor = builder.Constant(bias, biasName);
         }
 
         // Prepare convolution parameters

@@ -259,6 +259,42 @@ void MetalGraphBuilder::AddTensor(const std::string& name, void* tensor) {
     }
 }
 
+void* MetalGraphBuilder::Constant(const cv::Mat& data, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl) return nullptr;
+
+        // Ensure data is continuous for MPSGraph
+        cv::Mat continuousData = data;
+        if (!data.isContinuous()) {
+            continuousData = data.clone();
+        }
+
+        // Create NSData from Mat
+        NSData* nsData = [NSData dataWithBytes:continuousData.data
+                                        length:continuousData.total() * continuousData.elemSize()];
+
+        // Create shape array
+        NSMutableArray<NSNumber*>* shape = [NSMutableArray new];
+        for (int d = 0; d < continuousData.dims; d++) {
+            [shape addObject:@(continuousData.size[d])];
+        }
+
+        // Get data type
+        MPSDataType dataType = getMPSDataType(continuousData.type());
+
+        // Create constant tensor
+        MPSGraphTensor* tensor = [netImpl.graph constantWithData:nsData
+                                                           shape:shape
+                                                        dataType:dataType];
+
+        // Store in named tensors
+        AddTensor(name, (__bridge void*)tensor);
+
+        return (__bridge void*)tensor;
+    }
+}
+
 // MetalNet implementation
 MetalNet::MetalNet() : impl(nullptr), hasNetOwner(false), isInit(false), builderPtr(nullptr) {
 }
