@@ -11,6 +11,10 @@
 
 #include <unordered_map>
 
+#ifdef HAVE_METAL
+#include "metal/graph_builder.hpp"
+#endif
+
 namespace cv { namespace dnn {
 
 constexpr bool haveMetal() {
@@ -25,35 +29,6 @@ constexpr bool haveMetal() {
 
 class MetalBackendNode;
 class MetalBackendWrapper;
-
-// Graph builder class for Metal backend
-// Encapsulates graph building operations similar to ml::GraphBuilder in WebNN
-class MetalGraphBuilder
-{
-public:
-    MetalGraphBuilder(void* graphImpl);  // MPSGraphNetImpl* (opaque)
-
-    // Operation builders (return MPSGraphTensor* as void*)
-    void* Relu(void* inputTensor, const std::string& name);
-    void* Add(void* tensor1, void* tensor2, const std::string& name);
-    void* Mul(void* tensor1, void* tensor2, const std::string& name);
-    void* Max(void* tensor1, void* tensor2, const std::string& name);
-    void* Min(void* tensor1, void* tensor2, const std::string& name);
-    void* Div(void* tensor1, void* tensor2, const std::string& name);
-    void* Conv2d(void* inputTensor, void* weightsTensor, void* biasTensor,
-                 const std::vector<int>& strides, const std::vector<int>& paddings,
-                 const std::vector<int>& dilations, int groups, const std::string& name);
-
-    // Tensor management
-    void* GetTensor(const std::string& name);
-    void AddTensor(const std::string& name, void* tensor);
-
-    // Constant tensor creation
-    void* Constant(const cv::Mat& data, const std::string& name);
-
-private:
-    void* impl;  // MPSGraphNetImpl* (opaque pointer)
-};
 
 class MetalNet
 {
