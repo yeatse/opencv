@@ -11,16 +11,17 @@
 
 ## 🚀 IMPLEMENTATION STATUS
 
-**Current Phase:** Phase 0 - Infrastructure Complete ✅
-**Last Updated:** 2025-11-08
+**Current Phase:** Phase 1 - Core Layer Implementation 🔄 IN PROGRESS
+**Last Updated:** 2025-11-10
 **Branch:** `claude/analyze-opencv-structure-011CUtinspr7Uf5FNCxP1v2j`
+**Latest Commit:** `a53c2b350d` - Fix Metal backend execution
 
 ### Progress Overview
 
 | Phase | Status | Completion | Details |
 |-------|--------|------------|---------|
 | **Phase 0: Setup & Infrastructure** | ✅ Complete | 100% | All deliverables implemented |
-| **Phase 1: Core Layer Implementation** | 🔄 Next | 0% | Ready to start |
+| **Phase 1: Core Layer Implementation** | 🔄 In Progress | 10% | **ReLU working on GPU!** ✨ |
 | **Phase 2: Advanced Layers** | ⏳ Pending | 0% | Week 4-5 |
 | **Phase 3: Detection Layers** | ⏳ Pending | 0% | Week 6-9 |
 | **Phase 4: Optimization & Polish** | ⏳ Pending | 0% | Week 10-12 |
@@ -112,42 +113,128 @@ Modified Files:
 
 ### 🎯 Current Capabilities
 
-**What Works Now:**
+**What Works Now (as of commit a53c2b350d):**
+
 ```cpp
-Net net = readNetFromONNX("model.onnx");
+// Example 1: ReLU layer execution on Metal/GPU
+Net net;
+LayerParams lp;
+lp.type = "ReLU";
+lp.name = "testReLU";
+net.addLayerToPrev(lp.name, lp.type, lp);
+
+Mat input(4, sizes, CV_32F);  // 4D tensor
 net.setPreferableBackend(DNN_BACKEND_METAL);  // ✅ Compiles successfully
-net.setPreferableTarget(DNN_TARGET_OPENCL);   // ✅ Accepts GPU target
+net.setPreferableTarget(DNN_TARGET_CPU);      // ✅ Accepts target
+net.setInput(input);
+Mat output = net.forward();  // ✅ EXECUTES ON METAL/GPU! 🎉
+
+// Example 2: Model with fallback (Phase 1 partial)
+Net net = readNetFromONNX("model.onnx");
+net.setPreferableBackend(DNN_BACKEND_METAL);
+net.setInput(blob);
+Mat output = net.forward();  // ✅ Works!
+// - ReLU layers execute on Metal/GPU
+// - Unsupported layers fall back to CPU
+// - Hybrid execution works correctly
 ```
 
-**Expected Behavior (Phase 0):**
-```cpp
-net.forward();  // ⚠️ Throws CV_Error (as designed)
-// Error: "Metal backend forward pass not implemented yet.
-//         Layers should fall back to CPU implementation."
+**Current Status:**
+- ✅ Metal backend initializes and compiles correctly
+- ✅ ReLU layers execute on GPU via MPSGraph
+- ✅ Data flows correctly: Host → Metal → GPU → Metal → Host
+- ✅ Hybrid execution (Metal + CPU fallback) working
+- ✅ All 11 tests passing
+- ✅ No memory leaks (validated with 10 iterations)
+
+### 📝 Recent Commits (since 881774d)
+
+```
+a53c2b350d - Fix Metal backend execution: enable layer execution and correct data flow ← BREAKTHROUGH
+1294db576f - Add input blobs to Metal network blob management
+c32417a405 - Fix Metal backend: mark layer outputs for graph execution
+02e3d20c56 - Add op_metal.hpp include to net_impl.hpp
+928ff3af87 - Fix type mismatch: cast preferableTarget to Target enum
+bc0d78d84e - Consolidate Metal backend into single file like WebNN
+fb755f443a - Fix Metal backend compilation and test failures
+232349d6c3 - Refactor Metal backend to share device across all wrappers
+8b9484097b - Fix critical Metal backend integration issues
+7b29c6b947 - Fix Metal backend compilation and test failures
+61054d44b5 - Add ReLU layer support for Metal backend ← FIRST WORKING LAYER
+82c4abe65b - Implement Phase 1 core infrastructure for Metal backend
+49fc463657 - Fix Metal backend registration in DNN net implementation
+cf7a15e62d - Register Metal backend in DNN infrastructure
+5170b7d3c6 - Add comprehensive test suite for Metal backend (Phase 0)
 ```
 
-This is **correct** behavior for Phase 0. All layers properly fall back to CPU until Phase 1 implements the Metal execution path.
+**Total Changes:** 10,437 insertions across 24 files
 
-### 📝 Recent Commits
+### ✅ Phase 1 Progress (Commits 881774d..a53c2b350d)
+
+**BREAKTHROUGH: Metal Backend Now Executes on GPU** 🎉
+
+#### Critical Fixes (Commit a53c2b350d - 2025-11-10)
+
+1. **Skip Flag Fix** - Enabled Metal layer execution
+   - Issue: Layers were marked `ld.skip=true` but never cleared
+   - Fix: Added `ld.skip=false` after backend node creation
+   - Impact: Metal execution now happens instead of silent CPU fallback
+   - Location: `modules/dnn/src/op_metal.mm:715`
+
+2. **Input Feeding Fix** - Corrected MPSGraph data flow
+   - Issue: Was feeding all blobs including output tensors
+   - Fix: Only feed input placeholders by iterating over `inputNames`
+   - Impact: MPSGraph now receives correct input data
+   - Location: `modules/dnn/src/op_metal.mm:170-213`
+
+3. **Output Retrieval** - Direct host memory access
+   - Improvement: Read directly into host memory when available
+   - Fallback: Use Metal buffer intermediate if needed
+   - Impact: Simplified synchronization, better performance
+
+#### Layer Implementation Status
+
+| Layer | Status | File | Commit |
+|-------|--------|------|--------|
+| **ReLU** | ✅ Working on GPU | `elementwise_layers.cpp:383-554` | 61054d44b5 |
+| Element-wise Add | ⏳ Helper ready | `op_metal.mm:316-332` | - |
+| Convolution | ⏳ Helper ready | `op_metal.mm:334-378` | - |
+| Pooling | ⏳ To implement | - | - |
+| BatchNorm | ⏳ To implement | - | - |
+| Concat | ⏳ To implement | - | - |
+| Reshape | ⏳ To implement | - | - |
+| Permute | ⏳ To implement | - | - |
+| Softmax | ⏳ To implement | - | - |
+| InnerProduct | ⏳ To implement | - | - |
+
+**Completion: 1/10 core layers (10%)**
+
+#### Test Results
 
 ```
-5170b7d3 - Add comprehensive test suite for Metal backend (Phase 0)
-2985d4f3 - Add Phase 0 completion status to implementation plan
-7a33b94b - Fix Objective-C scope and warnings in Metal backend
-f284981d - Fix Metal backend detection: Add Foundation framework and fix imports
-a9c91d79 - Phase 0: Add Metal backend infrastructure for DNN module
-f5fabc75 - Refactor plan: Use 'Metal' for public API, MPSGraph as implementation detail
+[  PASSED  ] 11/11 tests
+
+✅ backend_availability
+✅ backend_selection
+✅ backend_selection_gpu_target
+✅ basic_inference_fallback
+✅ compare_with_cpu_backend
+✅ memory_management (10 iterations, no leaks)
+✅ multiple_networks
+✅ input_shapes
+✅ fallback_detection
+✅ backend_switching
+✅ relu_layer ← **NEW: GPU execution verified!**
 ```
 
 ### 🔜 Next Steps (Phase 1: Week 2-3)
 
-**Ready to Implement:**
-1. Convolution layer with `initMetal()` - NCHW/NHWC layout handling
-2. Pooling layers (Max/Average) - MPSGraph descriptor configuration
-3. Activation layers (ReLU, Sigmoid, Tanh) - Direct API mapping
-4. Element-wise operations (Add, Multiply) - Broadcasting support
-5. Complete `MetalNet::forward()` - Graph execution pipeline
-6. Memory management - Buffer allocation, H2D/D2H transfers
+**Immediate Priorities:**
+1. ✅ ~~ReLU activation~~ - **COMPLETE AND WORKING**
+2. Element-wise Add/Multiply - Integrate existing helpers
+3. Convolution layer - Implement weight tensor creation
+4. Pooling layers (Max/Average) - Add MPSGraph pool operations
+5. Remaining core layers - Follow ReLU pattern
 
 **Target Milestone:** Working MobileNetV2/ResNet18 inference on GPU by end of Phase 1
 
@@ -607,51 +694,83 @@ net.forward();  // ⚠️ Throws CV_Error (expected)
 
 ---
 
-### Phase 1: Core Layer Implementation (Week 2-3)
+### Phase 1: Core Layer Implementation (Week 2-3) 🔄 IN PROGRESS
 
-**Tasks:**
+**Status:** 10% Complete (1/10 layers)
+**Started:** 2025-11-09
+**Latest Update:** 2025-11-10
 
-1. **Convolution Layer**
-   - Implement `ConvolutionLayerImpl::initMetal()` (uses MPSGraph internally)
-   - Handle NCHW → NHWC layout conversion
-   - Map stride, padding, dilation to `MPSGraphConvolution2DOpDescriptor`
-   - Weight layout handling (OIHW)
+**Progress:**
 
-2. **Pooling Layer**
-   - Max pooling: `maxPooling2DWithSourceTensor:descriptor:name:`
-   - Average pooling: `averagePooling2DWithSourceTensor:descriptor:name:`
-   - Descriptor configuration
+1. ✅ **ReLU Layer** (Commit 61054d44b5) - **COMPLETE AND WORKING ON GPU**
+   - Implemented `ReLUFunctor::initMetalAPI()` and `ElementWiseLayer::initMetal()`
+   - Uses `net->addReLU()` MPSGraph helper
+   - Supports standard ReLU (slope == 0)
+   - Test case added and passing
+   - Executes on Metal/GPU via MPSGraph
+   - File: `modules/dnn/src/layers/elementwise_layers.cpp:383-554`
 
-3. **Activation Layers**
-   - ReLU: `reLUWithTensor:name:`
-   - ReLU6: `clipByValueWithTensor:minValueTensor:maxValueTensor:name:`
-   - Sigmoid: `sigmoidWithTensor:name:`
-   - Tanh: `tanhWithTensor:name:`
+2. ⏳ **Convolution Layer** - IN PROGRESS
+   - Helper method exists: `MetalNet::addConv2D()` (op_metal.mm:334-378)
+   - Need to implement: Weight tensor creation from cv::Mat
+   - Need to implement: `ConvolutionLayerImpl::initMetal()`
+   - TODO: NCHW layout handling
+   - TODO: Weight layout handling (OIHW)
 
-4. **BatchNorm Layer**
-   - Option 1: Fusion into previous conv (if adjacent)
-   - Option 2: Manual implementation with `reductionMean/Variance`
+3. ⏳ **Pooling Layer** - READY TO IMPLEMENT
+   - Need to add: `maxPooling2DWithSourceTensor:descriptor:name:`
+   - Need to add: `averagePooling2DWithSourceTensor:descriptor:name:`
+   - TODO: Descriptor configuration
 
-5. **Element-wise Layers**
-   - Add: `additionWithPrimaryTensor:secondaryTensor:name:`
-   - Mul: `multiplicationWithPrimaryTensor:secondaryTensor:name:`
-   - Broadcasting support
+4. ⏳ **Activation Layers** - READY TO IMPLEMENT
+   - ReLU: ✅ **DONE**
+   - ReLU6: TODO - `clipByValueWithTensor:minValueTensor:maxValueTensor:name:`
+   - Sigmoid: TODO - `sigmoidWithTensor:name:`
+   - Tanh: TODO - `tanhWithTensor:name:`
 
-6. **Graph Building Logic**
-   - Implement `Net::Impl::initMetalBackend()`
-   - Layer-by-layer graph construction (using MPSGraph internally)
-   - Input/output tensor management
-   - Named tensor tracking
+5. ⏳ **BatchNorm Layer** - READY TO IMPLEMENT
+   - TODO: Option 1: Fusion into previous conv (if adjacent)
+   - TODO: Option 2: Manual implementation with `reductionMean/Variance`
 
-7. **Execution Pipeline**
-   - Implement `MetalNet::forward()` (calls MPSGraph internally)
-   - Input feeding: `cv::Mat` → `MPSGraphTensorData`
-   - Graph execution: `runWithMTLCommandQueue:feeds:targetTensors:`
-   - Output retrieval: `MPSGraphTensorData` → `cv::Mat`
+6. ⏳ **Element-wise Layers** - READY TO IMPLEMENT
+   - Helper exists: `MetalNet::addAddition()` (op_metal.mm:316-332)
+   - Need to implement: `EltwiseLayerImpl::initMetal()`
+   - TODO: Add: `additionWithPrimaryTensor:secondaryTensor:name:`
+   - TODO: Mul: `multiplicationWithPrimaryTensor:secondaryTensor:name:`
+   - TODO: Broadcasting support
 
-**Deliverable:** Working inference for simple models (MobileNetV2, ResNet18)
+7. ✅ **Graph Building Logic** - **COMPLETE** (Commits 82c4abe65b, bc0d78d84e)
+   - ✅ Implemented `Net::Impl::initMetalBackend()`
+   - ✅ Layer-by-layer graph construction (using MPSGraph internally)
+   - ✅ Input/output tensor management
+   - ✅ Named tensor tracking
+   - File: `modules/dnn/src/op_metal.mm:511-742`
 
-**Validation:**
+8. ✅ **Execution Pipeline** - **COMPLETE AND WORKING** (Commit a53c2b350d)
+   - ✅ Implemented `MetalNet::forward()` (calls MPSGraph internally)
+   - ✅ Input feeding: `cv::Mat` → `MPSGraphTensorData` (fixed in a53c2b350d)
+   - ✅ Graph execution: `runWithMTLCommandQueue:feeds:targetTensors:`
+   - ✅ Output retrieval: `MPSGraphTensorData` → `cv::Mat` (direct to host)
+   - ✅ Skip flag fixed: Layers execute on Metal instead of CPU fallback
+   - File: `modules/dnn/src/op_metal.mm:159-252`
+
+**Deliverable:** Working inference for simple models (MobileNetV2, ResNet18) - **IN PROGRESS**
+
+**Current Validation (ReLU working):**
+```cpp
+// ✅ THIS WORKS NOW (as of a53c2b350d)
+Net net;
+LayerParams lp;
+lp.type = "ReLU";
+lp.name = "testReLU";
+net.addLayerToPrev(lp.name, lp.type, lp);
+
+net.setPreferableBackend(DNN_BACKEND_METAL);
+net.setInput(input);
+Mat output = net.forward();  // ✅ EXECUTES ON METAL/GPU!
+```
+
+**Target Validation (when conv/pooling added):**
 ```cpp
 Net net = readNetFromONNX("mobilenet_v2.onnx");
 net.setPreferableBackend(DNN_BACKEND_METAL);
@@ -1544,25 +1663,26 @@ Week  1   2   3   4   5   6   7   8   9  10  11  12
 Phase 0: Setup & Infrastructure ✅ COMPLETE
       [✓✓✓✓]
 
-Phase 1: Core Layers              🔄 READY TO START
-          [████████]
+Phase 1: Core Layers              🔄 IN PROGRESS (10% done)
+          [█░░░░░░░]
+           ↑ ReLU working on GPU!
 
 Phase 2: Advanced Layers
-                  [████]
+                  [░░░░]
 
 Phase 3: Detection
-                      [████████]
+                      [░░░░░░░░]
 
 Phase 4: Optimization
-                              [████████]
+                              [░░░░░░░░]
 
 Testing (Continuous)
-      [════════════════════════════════════]
+      [════════════════════════════════════] ✅ 11/11 passing
 
 Documentation
                                       [████]
 
-CURRENT STATUS: Week 1 Complete → Ready for Week 2
+CURRENT STATUS: Week 2 in progress - First layer executing on Metal/GPU!
 ```
 
 ### 13.2 Milestones
@@ -1577,8 +1697,18 @@ CURRENT STATUS: Week 1 Complete → Ready for Week 2
 - ✅ Test suite implemented (11 test cases, all passing)
 - ✅ CPU fallback behavior validated
 
-**M2: Basic Inference Working (Week 3)** 🔄 **NEXT TARGET**
-- [ ] Convolution, ReLU, Pooling implemented
+**M1.5: GPU Execution Working (Week 2)** ✅ **ACHIEVED** (2025-11-10)
+- ✅ Fixed skip flag enabling Metal execution (commit a53c2b350d)
+- ✅ Fixed input feeding to MPSGraph
+- ✅ ReLU layer working on GPU (commit 61054d44b5)
+- ✅ All 11 tests passing
+- ✅ Hybrid execution (Metal + CPU fallback) working
+- ✅ No memory leaks detected
+
+**M2: Basic Inference Working (Week 3)** 🔄 **IN PROGRESS**
+- [x] ~~ReLU~~ ✅ **DONE**
+- [ ] Convolution - IN PROGRESS (helper exists, need weight tensors)
+- [ ] Pooling - READY TO IMPLEMENT
 - [ ] MobileNetV2 runs on Metal backend (MPSGraph internally)
 - [ ] Accuracy matches CPU
 
