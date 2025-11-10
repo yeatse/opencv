@@ -49,7 +49,8 @@ TEST(DNN_Metal, target_is_noop)
     ASSERT_NO_THROW(net.setPreferableTarget(DNN_TARGET_CPU_FP16));
 
     // Verify inference works regardless of target setting
-    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    int inputSizes[] = {1, 3, 224, 224};
+    Mat input = Mat::ones(4, inputSizes, CV_32F);
     net.setInput(input);
     Mat output;
     ASSERT_NO_THROW(output = net.forward());
@@ -743,7 +744,8 @@ TEST(DNN_Metal, convolution_layer)
     net.setPreferableTarget(DNN_TARGET_CPU);
 
     // Create test input (1 batch, 3 channels, 224x224)
-    Mat input = Mat::ones(1, 3, 224, 224, CV_32F);
+    int inputSizes[] = {1, 3, 224, 224};
+    Mat input = Mat::ones(4, inputSizes, CV_32F);
 
     // Run inference with Metal backend
     net.setInput(input);
@@ -791,7 +793,7 @@ TEST(DNN_Metal, simple_conv_test)
 
     // Setup CPU network
     {
-        int conv_id = netCPU.addLayerToPrev(convParams.name, convParams.type, convParams);
+        netCPU.addLayerToPrev(convParams.name, convParams.type, convParams);
         netCPU.setInputsNames({"input"});
         netCPU.setPreferableBackend(DNN_BACKEND_OPENCV);
         netCPU.setPreferableTarget(DNN_TARGET_CPU);
@@ -799,7 +801,7 @@ TEST(DNN_Metal, simple_conv_test)
 
     // Setup Metal network
     {
-        int conv_id = netMetal.addLayerToPrev(convParams.name, convParams.type, convParams);
+        netMetal.addLayerToPrev(convParams.name, convParams.type, convParams);
         netMetal.setInputsNames({"input"});
         netMetal.setPreferableBackend(DNN_BACKEND_METAL);
         netMetal.setPreferableTarget(DNN_TARGET_CPU);
