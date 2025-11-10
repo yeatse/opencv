@@ -19,7 +19,6 @@
 
 @property (nonatomic, strong) MPSGraph* graph;
 @property (nonatomic, strong) id<MTLDevice> device;
-@property (nonatomic, strong) id<MTLCommandQueue> commandQueue;
 @property (nonatomic, strong) MPSGraphExecutable* executable;
 
 @property (nonatomic, strong) NSMutableDictionary<NSString*, MPSGraphTensorData*>* allBlobs;
@@ -41,7 +40,6 @@
     self = [super init];
     if (self) {
         _device = device;
-        _commandQueue = [device newCommandQueue];
         _graph = [[MPSGraph alloc] init];
         _allBlobs = [NSMutableDictionary new];
         _inputNames = [NSMutableArray new];
@@ -211,14 +209,14 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
             }
         }
 
-        // Execute graph using runWithMTLCommandQueue (direct execution)
-        // Note: runWithMTLCommandQueue is synchronous and blocks until completion
+        // Execute graph using runWithFeeds (managed execution)
+        // This API manages device/queue internally and syncs results to CPU
+        // Note: runWithFeeds is synchronous and blocks until completion
         if (targetTensors.count > 0) {
-            NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results =
-                [netImpl.graph runWithMTLCommandQueue:netImpl.commandQueue
-                                                feeds:feeds
-                                        targetTensors:targetTensors
-                                     targetOperations:nil];
+            MPSGraphTensorDataDictionary* results =
+                [netImpl.graph runWithFeeds:feeds
+                              targetTensors:targetTensors
+                           targetOperations:nil];
 
             // Copy results back to output wrappers
             for (size_t i = 0; i < outBlobsWrappers.size() && i < netImpl.outputNames.count; i++) {
