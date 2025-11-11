@@ -43,6 +43,7 @@ public:
     ~MetalNet();
 
     void addOutput(const std::string& name);
+    void setUnconnectedNodes(Ptr<MetalBackendNode>& node);
 
     bool isInitialized();
     void init(Target targetId);

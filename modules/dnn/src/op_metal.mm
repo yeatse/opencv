@@ -147,6 +147,10 @@ void MetalNet::addOutput(const std::string& name) {
     }
 }
 
+void MetalNet::setUnconnectedNodes(Ptr<MetalBackendNode>& node) {
+    addOutput(node->name);
+}
+
 bool MetalNet::isInitialized() {
     return isInit;
 }
@@ -532,16 +536,10 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
             CV_LOG_WARNING(NULL, "Layer " + ld.type + " name " + ld.name + " is unsupported by Metal backend, falling back to CPU");
 
             addMetalOutputs(ld);
-
-            // Finalize the current Metal network before resetting it
-            if (!net.empty()) {
-                net->createGraph(static_cast<Target>(preferableTarget));
-            }
-
             net = Ptr<MetalNet>();
             layer->preferableTarget = DNN_TARGET_CPU;
 
-            // Mark input nodes as unconnected
+            // Mark input nodes as unconnected (will be compiled in finalization stage)
             for (size_t i = 0; i < ld.inputBlobsId.size(); ++i)
             {
                 LayerData &inpLd = layers[ld.inputBlobsId[i].lid];
@@ -549,7 +547,7 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                 if (!inpNode.empty()) {
                     Ptr<MetalBackendNode> metalNode = inpNode.dynamicCast<MetalBackendNode>();
                     if (!metalNode.empty() && !metalNode->net.empty()) {
-                        metalNode->net->addOutput(metalNode->name);
+                        metalNode->net->setUnconnectedNodes(metalNode);
                     }
                 }
             }
@@ -706,26 +704,52 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
                 }
             }
 
+            // Handle leaf nodes (nodes with no consumers)
+            if (ld.consumers.empty()) {
+                metalNode->net->setUnconnectedNodes(metalNode);
+            }
+
+            // Handle user-requested outputs (blobsToKeep)
+            for (const auto& pin : blobsToKeep_)
+            {
+                if (pin.lid == ld.id)
+                {
+                    metalNode->net->addOutput(metalNode->name);
+                    break;
+                }
+            }
+
             // Mark outputs for graph execution (like WebNN does)
             addMetalOutputs(ld);
 
-            // Enable Metal execution for this layer (clear skip flag)
-            ld.skip = false;
+            // Note: skip flag clearing moved to finalization stage (like WebNN)
         }
     }
 
-    // Finalize all Metal networks
-    for (MapIdToLayerData::iterator it = layers.begin(); it != layers.end(); ++it)
+    // Finalize all Metal networks (reverse iteration like WebNN)
+    for (MapIdToLayerData::reverse_iterator it = layers.rbegin(); it != layers.rend(); ++it)
     {
         LayerData &ld = it->second;
-        Ptr<BackendNode> node = ld.backendNodes[DNN_BACKEND_METAL];
-        if (!node.empty())
+        auto iter = ld.backendNodes.find(preferableBackend);
+        if (iter == ld.backendNodes.end())
+            continue;
+
+        Ptr<BackendNode>& node = iter->second;
+        if (node.empty())
+            continue;
+
+        Ptr<MetalBackendNode> metalNode = node.dynamicCast<MetalBackendNode>();
+        if (metalNode.empty())
+            continue;
+
+        CV_Assert(!metalNode->net.empty());
+
+        // Compile only uninitialized graphs (lazy compilation like WebNN)
+        if (!metalNode->net->isInitialized())
         {
-            Ptr<MetalBackendNode> metalNode = node.dynamicCast<MetalBackendNode>();
-            if (!metalNode.empty() && !metalNode->net.empty())
-            {
-                metalNode->net->createGraph(static_cast<Target>(preferableTarget));
-            }
+            metalNode->net->setUnconnectedNodes(metalNode);
+            metalNode->net->createGraph(static_cast<Target>(preferableTarget));
+            ld.skip = false;  // Clear skip flag here (like WebNN)
         }
     }
 }
