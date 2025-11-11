@@ -65,6 +65,23 @@ MPSGraphTensorPtr MetalGraphBuilder::Relu(MPSGraphTensorPtr inputTensor, const s
     }
 }
 
+MPSGraphTensorPtr MetalGraphBuilder::Identity(MPSGraphTensorPtr inputTensor, const std::string& name) {
+    @autoreleasepool {
+        MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
+        if (!netImpl || !inputTensor) return nullptr;
+
+        MPSGraphTensor* input = (__bridge MPSGraphTensor*)inputTensor;
+        // Use identity operation to create a copy of the tensor
+        MPSGraphTensor* output = [netImpl.graph identityWithTensor:input
+                                                              name:[NSString stringWithUTF8String:name.c_str()]];
+
+        // Store named tensor
+        AddTensor(name, (__bridge void*)output);
+
+        return (__bridge void*)output;
+    }
+}
+
 MPSGraphTensorPtr MetalGraphBuilder::Add(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
@@ -156,7 +173,7 @@ MPSGraphTensorPtr MetalGraphBuilder::Div(MPSGraphTensorPtr tensor1, MPSGraphTens
 }
 
 MPSGraphTensorPtr MetalGraphBuilder::Conv2d(MPSGraphTensorPtr inputTensor, MPSGraphTensorPtr weightsTensor, MPSGraphTensorPtr biasTensor,
-                                  const std::vector<int>& strides, const std::vector<int>& paddings,
+                                  const std::vector<int>& strides, const std::vector<int>& pads_begin, const std::vector<int>& pads_end,
                                   const std::vector<int>& dilations, int groups, const std::string& name) {
     @autoreleasepool {
         MPSGraphNetImpl* netImpl = (__bridge MPSGraphNetImpl*)impl;
@@ -174,10 +191,11 @@ MPSGraphTensorPtr MetalGraphBuilder::Conv2d(MPSGraphTensorPtr inputTensor, MPSGr
                                                                                                  paddingStyle:MPSGraphPaddingStyleExplicit
                                                                                                    dataLayout:MPSGraphTensorNamedDataLayoutNCHW
                                                                                                 weightsLayout:MPSGraphTensorNamedDataLayoutOIHW];
-        desc.paddingLeft = paddings[1];
-        desc.paddingRight = paddings[1];
-        desc.paddingTop = paddings[0];
-        desc.paddingBottom = paddings[0];
+        // Set padding: pads_begin[1] = left, pads_end[1] = right, pads_begin[0] = top, pads_end[0] = bottom
+        desc.paddingLeft = pads_begin[1];
+        desc.paddingRight = pads_end[1];
+        desc.paddingTop = pads_begin[0];
+        desc.paddingBottom = pads_end[0];
 
         MPSGraphTensor* output = [netImpl.graph convolution2DWithSourceTensor:input
                                                                 weightsTensor:weights
@@ -232,7 +250,8 @@ MPSGraphTensorPtr MetalGraphBuilder::Constant(const cv::Mat& data, const std::st
             continuousData = data.clone();
         }
 
-        // Create NSData from Mat
+        // IMPORTANT: Use dataWithBytes:length: which COPIES the data
+        // This ensures the data remains valid even after continuousData goes out of scope
         NSData* nsData = [NSData dataWithBytes:continuousData.data
                                         length:continuousData.total() * continuousData.elemSize()];
 

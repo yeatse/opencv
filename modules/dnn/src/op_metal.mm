@@ -53,7 +53,10 @@
 }
 
 - (void)addOutput:(NSString*)name {
-    [_outputNames addObject:name];
+    // Only add if not already present to avoid duplicates
+    if (![_outputNames containsObject:name]) {
+        [_outputNames addObject:name];
+    }
 }
 
 @end
@@ -284,13 +287,17 @@ void MetalNet::forward(const std::vector<Ptr<BackendWrapper>>& outBlobsWrappers,
 
                 MPSGraphTensorData* resultData = results[outTensor];
                 if (resultData) {
-                    // Get the data directly from MPSGraphTensorData's underlying buffer
+                    // Get MPSNDArray from result
                     MPSNDArray* resultArray = [resultData mpsndarray];
 
-                    // Read data directly into host memory instead of going through Metal buffer
+                    // Read data directly into host memory
+                    // TODO: Fix data layout mismatch between MPSNDArray and OpenCV Mat
+                    // MPSNDArray reports dimensions in reverse order but actual data layout unclear
                     if (metalWrapper->host && metalWrapper->host->data) {
                         // Validate that host memory is contiguous to prevent corruption
                         CV_Assert(metalWrapper->host->isContinuous());
+
+                        // Direct read for now - data layout issue remains unresolved
                         [resultArray readBytes:metalWrapper->host->data strideBytes:nil];
                     } else {
                         // Fallback: use Metal buffer as intermediate
@@ -525,6 +532,12 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
             CV_LOG_WARNING(NULL, "Layer " + ld.type + " name " + ld.name + " is unsupported by Metal backend, falling back to CPU");
 
             addMetalOutputs(ld);
+
+            // Finalize the current Metal network before resetting it
+            if (!net.empty()) {
+                net->createGraph(static_cast<Target>(preferableTarget));
+            }
+
             net = Ptr<MetalNet>();
             layer->preferableTarget = DNN_TARGET_CPU;
 
@@ -637,6 +650,21 @@ void Net::Impl::initMetalBackend(const std::vector<LayerPin>& blobsToKeep_)
         if (!fused)
         {
             CV_Assert(ld.inputBlobsId.size() == inputNodes.size());
+            // Create new backend nodes for non-primary outputs (like WebNN does)
+            for (size_t i = 0; i < ld.inputBlobsId.size(); ++i)
+            {
+                int lid = ld.inputBlobsId[i].lid;
+                int oid = ld.inputBlobsId[i].oid;
+                if (oid == 0 || lid == 0)
+                    continue;
+
+                auto metalInpNode = inputNodes[i].dynamicCast<MetalBackendNode>();
+                inputNodes[i] = Ptr<BackendNode>(new MetalBackendNode(metalInpNode->tensor));
+                Ptr<MetalBackendNode> newNode = inputNodes[i].dynamicCast<MetalBackendNode>();
+                newNode->net = metalInpNode->net;
+                newNode->name = metalInpNode->name;
+            }
+
             if (inputNodes.size())
             {
                 // Call layer's initMetal to add operations to the graph

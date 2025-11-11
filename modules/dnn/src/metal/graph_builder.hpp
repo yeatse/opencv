@@ -30,13 +30,14 @@ public:
 
     // Operation builders (return MPSGraphTensorPtr)
     MPSGraphTensorPtr Relu(MPSGraphTensorPtr inputTensor, const std::string& name);
+    MPSGraphTensorPtr Identity(MPSGraphTensorPtr inputTensor, const std::string& name);
     MPSGraphTensorPtr Add(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
     MPSGraphTensorPtr Mul(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
     MPSGraphTensorPtr Max(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
     MPSGraphTensorPtr Min(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
     MPSGraphTensorPtr Div(MPSGraphTensorPtr tensor1, MPSGraphTensorPtr tensor2, const std::string& name);
     MPSGraphTensorPtr Conv2d(MPSGraphTensorPtr inputTensor, MPSGraphTensorPtr weightsTensor, MPSGraphTensorPtr biasTensor,
-                             const std::vector<int>& strides, const std::vector<int>& paddings,
+                             const std::vector<int>& strides, const std::vector<int>& pads_begin, const std::vector<int>& pads_end,
                              const std::vector<int>& dilations, int groups, const std::string& name);
 
     // Tensor management

@@ -1044,16 +1044,15 @@ public:
         Mat weights = blobs[0];
         CV_Assert(weights.dims == 4);  // Expecting 4D weights [O, I, H, W]
 
-        // Calculate groups
-        int outCn = weights.size[0];
-        int groups = 1;
-        if (blobs[0].size.p) {
-            // Get actual number of groups from layer params
-            // For grouped convolution, groups = outCn / numOutput
-            // For standard conv, groups = 1
-            groups = outCn / numOutput;
-            if (groups == 0) groups = 1;
-        }
+        // Calculate groups from input and weight dimensions
+        // weights shape: [outCn, inpGroupCn, H, W] where inpGroupCn = inpCn / groups
+        // So groups = inpCn / inpGroupCn
+        CV_Assert(inputs.size() >= 1);
+        Ptr<MetalBackendWrapper> inpWrapper = inputs[0].dynamicCast<MetalBackendWrapper>();
+        CV_Assert(!inpWrapper.empty() && inpWrapper->host);
+        int inpCn = inpWrapper->host->size[1];  // NCHW format, C is at index 1
+        int inpGroupCn = weights.size[1];  // Input channels per group
+        int ngroups = inpCn / inpGroupCn;
 
         // Create constant tensor for weights
         std::string weightsName = name + "_weights";
@@ -1078,9 +1077,10 @@ public:
                 biasSize = biasvec.size();
             }
 
-            // Create bias Mat in shape [1, numOutput, 1, 1] for broadcasting
-            std::vector<int> biasShape = {1, biasSize, 1, 1};
-            Mat bias(biasShape, CV_32F);
+            // Create bias Mat in shape [1, outCn, 1, 1] for NCHW broadcasting
+            // MPS Graph expects bias in 4D shape matching the output layout
+            int biasShape[] = {1, biasSize, 1, 1};
+            Mat bias(4, biasShape, CV_32F);
             memcpy(bias.ptr<float>(), biasData, biasSize * sizeof(float));
 
             // Create constant tensor for bias
@@ -1090,13 +1090,14 @@ public:
 
         // Prepare convolution parameters
         std::vector<int> stridesVec = {static_cast<int>(strides[0]), static_cast<int>(strides[1])};
-        std::vector<int> paddingsVec = {static_cast<int>(pads_begin[0]), static_cast<int>(pads_begin[1])};
+        std::vector<int> padsBeginVec = {static_cast<int>(pads_begin[0]), static_cast<int>(pads_begin[1])};
+        std::vector<int> padsEndVec = {static_cast<int>(pads_end[0]), static_cast<int>(pads_end[1])};
         std::vector<int> dilationsVec = {static_cast<int>(dilations[0]), static_cast<int>(dilations[1])};
 
         // Build convolution operation
         auto outputTensor = builder.Conv2d(inputTensor, weightsTensor, biasTensor,
-                                            stridesVec, paddingsVec, dilationsVec,
-                                            groups, name);
+                                            stridesVec, padsBeginVec, padsEndVec, dilationsVec,
+                                            ngroups, name);
 
         // Create output node
         Ptr<MetalBackendNode> outputNode = new MetalBackendNode(outputTensor);
